@@ -34,7 +34,9 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
       - name: Install dependencies
-        run: pip install -r requirements-dev.txt
+        run: |
+          pip install "numpy>=1.24.0,<2.0.0"
+          pip install -r requirements-dev.txt
       - name: Run tests
         run: pytest --cov=. --cov-report=xml -q
       - name: Upload coverage
