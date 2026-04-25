@@ -22,10 +22,10 @@ from splitter import make_dataloaders
 log = get_logger("ltc_engine.main")
 
 
-def build_model(cfg, n_etf: int) -> LTCModel:
+def build_model(cfg, n_etf: int, input_dim: int) -> LTCModel:
     m = cfg.model
     return LTCModel(
-        input_dim       = m.input_dim,
+        input_dim       = input_dim,
         hidden_dim      = m.n_neurons,
         n_etf           = n_etf,
         tau_min         = m.tau_min,
@@ -48,7 +48,9 @@ def cmd_train(args) -> None:
     features, delta_t    = preprocess(returns_df, macro_df, cfg.data.window)
 
     tickers = UNIVERSE_MAP[args.universe]
-    n_etf   = len([t for t in tickers if f"{t}_log_return" in returns_df.columns])
+    n_etf     = len(returns_df.columns)
+    input_dim = features.shape[1]
+    log.info("n_etf=%d  input_dim=%d", n_etf, input_dim)
 
     train_loader, val_loader, _ = make_dataloaders(
         features, returns_df, delta_t,
@@ -58,7 +60,7 @@ def cmd_train(args) -> None:
         val_end    = cfg.data.val_end,
     )
 
-    model = build_model(cfg, n_etf)
+    model = build_model(cfg, n_etf, input_dim)
     log.info("Model parameters: %s", sum(p.numel() for p in model.parameters()))
 
     from trainer import train
@@ -74,7 +76,9 @@ def cmd_eval(args) -> None:
     features, delta_t    = preprocess(returns_df, macro_df, cfg.data.window)
 
     tickers = UNIVERSE_MAP[args.universe]
-    n_etf   = len([t for t in tickers if f"{t}_log_return" in returns_df.columns])
+    n_etf     = len(returns_df.columns)
+    input_dim = features.shape[1]
+    log.info("n_etf=%d  input_dim=%d", n_etf, input_dim)
 
     _, _, test_loader = make_dataloaders(
         features, returns_df, delta_t,
@@ -82,7 +86,7 @@ def cmd_eval(args) -> None:
         train_end=cfg.data.train_end, val_end=cfg.data.val_end,
     )
 
-    model = build_model(cfg, n_etf)
+    model = build_model(cfg, n_etf, input_dim)
     ckpt  = torch.load(args.checkpoint, map_location=device)
     model.load_state_dict(ckpt["state_dict"])
     model = model.to(device)
@@ -124,7 +128,7 @@ def cli_infer():
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="P2-ETF-LIQUID-NEURAL-ODE")
-    parser.add_argument("--universe",   default="combined",                     choices=["fi","equity","combined"])
+    parser.add_argument("--universe",   default="combined",                     choices=["fi","equity","extended","combined"])
     parser.add_argument("--mode",       default="train",                         choices=["train","eval","infer"])
     parser.add_argument("--config",     default="ltc_config.toml")
     parser.add_argument("--checkpoint", default="checkpoints/best_val_sharpe.pt")
