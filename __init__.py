@@ -1,4 +1,4 @@
-"""Liquid Time-Constant Network ETF ranking engine (P2-ETF-LIQUID-NEURAL-ODE)."""
+# P2-ETF-LIQUID-NEURAL-ODE — package init
 from closed_form import ClosedFormLTCCell
 from config import load_config
 from ltc_cell import LTCCell
