@@ -10,7 +10,7 @@ tau_min         = 0.1         # Minimum time constant (days)
 tau_max         = 10.0        # Maximum time constant (days)
 sparsity        = 0.6         # NCP wiring sparsity
 use_closed_form = false       # Switch to closed-form at inference
-input_dim       = 14          # Feature dimension (returns + macro)
+input_dim       = 0           # auto-derived at runtime from feature matrix shape
 dropout         = 0.1         # MC Dropout probability
 
 [training]
