@@ -37,11 +37,16 @@ def modwt_denoise(
 ) -> np.ndarray:
     """MODWT denoising via universal soft thresholding.
 
+    Level is automatically capped to the max supported by the data length.
     If threshold is None it is estimated via the median absolute deviation
     of the finest detail coefficients (Donoho & Johnstone 1994).
     """
     values = np.asarray(series, dtype=float)
-    coeffs = pywt.swt(values, wavelet=wavelet, level=level, trim_approx=False)
+    max_level = pywt.swt_max_level(len(values))
+    actual_level = min(level, max_level)
+    if actual_level < 1:
+        return values.copy()
+    coeffs = pywt.swt(values, wavelet=wavelet, level=actual_level, trim_approx=False)
 
     denoised = []
     for i, (approx, detail) in enumerate(coeffs):
