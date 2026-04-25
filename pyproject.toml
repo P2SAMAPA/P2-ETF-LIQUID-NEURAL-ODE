@@ -68,6 +68,10 @@ line-length = 100
 select = ["E", "F", "W", "I", "N"]
 ignore = ["E501"]
 
+[tool.ruff.lint.per-file-ignores]
+"__init__.py" = ["N999"]   # filename has hyphens — unavoidable in flat-root repo
+"config.py"   = ["I001"]   # pydantic import must follow conditional tomllib block
+
 [tool.mypy]
 python_version = "3.10"
 warn_return_any = true
