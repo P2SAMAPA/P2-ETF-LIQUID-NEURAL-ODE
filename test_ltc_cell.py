@@ -1,3 +1,4 @@
+# ruff: noqa: I001
 """test_ltc_cell.py — Unit tests for LTCCell and ClosedFormLTCCell."""
 import pytest
 import torch
