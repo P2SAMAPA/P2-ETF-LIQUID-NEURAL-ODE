@@ -2,13 +2,18 @@ name: Daily Inference
 
 on:
   schedule:
-    - cron: "30 22 * * 1-5"   # 22:30 UTC Mon–Fri (after US market close)
-  workflow_dispatch:            # allow manual trigger
+    - cron: "30 22 * * 1-5"   # 22:30 UTC Mon-Fri (after US market close)
+  workflow_dispatch:
 
 jobs:
   infer:
-    name: Run daily inference and publish to HF
+    name: Infer — ${{ matrix.universe }} universe
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        universe: [fi, equity, combined]
+
     steps:
       - uses: actions/checkout@v4
 
@@ -16,38 +21,35 @@ jobs:
         with:
           python-version: "3.11"
 
+      - name: Install numpy (pinned)
+        run: pip install "numpy>=1.24.0,<2.0.0"
+
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      - name: Download checkpoint from HF
+      - name: Download checkpoint from HuggingFace — ${{ matrix.universe }}
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: |
-          python - <<'EOF'
+          python - << 'EOF'
+          import os, shutil
           from huggingface_hub import hf_hub_download
-          import shutil, os
+
+          universe = "${{ matrix.universe }}"
           path = hf_hub_download(
               repo_id="P2SAMAPA/P2-ETF-LIQUID-NEURAL-ODE",
-              filename="checkpoints/best_val_sharpe.pt",
+              filename=f"checkpoints/{universe}/best_val_sharpe.pt",
               repo_type="model",
               token=os.environ["HF_TOKEN"],
           )
           os.makedirs("checkpoints", exist_ok=True)
           shutil.copy(path, "checkpoints/best_val_sharpe.pt")
-          print("Checkpoint downloaded.")
+          print(f"Checkpoint downloaded for universe: {universe}")
           EOF
 
-      - name: Infer FI universe
+      - name: Infer — ${{ matrix.universe }}
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
-        run: python infer_daily.py --universe fi
-
-      - name: Infer Equity universe
-        env:
-          HF_TOKEN: ${{ secrets.HF_TOKEN }}
-        run: python infer_daily.py --universe equity
-
-      - name: Infer Combined universe
-        env:
-          HF_TOKEN: ${{ secrets.HF_TOKEN }}
-        run: python infer_daily.py --universe combined
+          OMP_NUM_THREADS: "2"
+          MKL_NUM_THREADS: "2"
+        run: python infer_daily.py --universe ${{ matrix.universe }}
