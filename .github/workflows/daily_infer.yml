@@ -12,7 +12,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        universe: [fi, equity, combined]
+        universe: [fi, equity, extended, combined]
 
     steps:
       - uses: actions/checkout@v4
