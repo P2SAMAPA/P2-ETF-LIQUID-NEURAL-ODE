@@ -8,7 +8,7 @@ Deploy:  streamlit run app.py
 from __future__ import annotations
 
 import os
-from datetime import datetime, timedelta
+from datetime import datetime
 
 import numpy as np
 import pandas as pd
@@ -197,8 +197,8 @@ with tab1:
     st.subheader(f"Rankings for {latest_date.date()}")
 
     try:
-        import plotly.graph_objects as go
         import plotly.express as px
+        import plotly.graph_objects as go
 
         colours = [UNIVERSE_COLOURS.get(t, "#888") for t in df_today["ticker"]]
 
@@ -466,9 +466,9 @@ with tab5:
 
     with col_a:
         st.markdown("""
-**Engine ID:** LIQUID-NEURAL-ODE  
-**Category:** Liquid Time-Constant Networks  
-**Suite Version:** P2Quant v8 · April 2026  
+**Engine ID:** LIQUID-NEURAL-ODE
+**Category:** Liquid Time-Constant Networks
+**Suite Version:** P2Quant v8 · April 2026
 
 **Core Algorithm**
 - Liquid Time-Constant Network (LTC-NN)
@@ -501,7 +501,7 @@ dh/dt = −[1/τ(x,h)] · h  +  f(x,h,t) · A(x)
 τ(x,h) = τ_min + softplus(W_τ · [x ‖ h] + b_τ)
 ```
 
-- **VIX spike** → τ → 0.2d (day-trader mode)  
+- **VIX spike** → τ → 0.2d (day-trader mode)
 - **Calm trend** → τ → 7d (position-trade mode)
 
 **Scoring**
