@@ -1,3 +1,4 @@
+# ruff: noqa: I001
 """test_ranker.py — Tests for cross-sectional z-score ranker."""
 import numpy as np
 import pandas as pd
