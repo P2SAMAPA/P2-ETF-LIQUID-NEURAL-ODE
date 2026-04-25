@@ -1,3 +1,4 @@
+# ruff: noqa: I001
 """conftest.py — pytest fixtures for LTC engine tests."""
 from __future__ import annotations
 
@@ -15,7 +16,7 @@ from config import (
     ScoringConfig,
     TrainingConfig,
 )
-from ltc_model import LTCModel
+from ltc_model import LTCModel  # noqa: E402
 
 
 # ── Constants ─────────────────────────────────────────────────────────────────
