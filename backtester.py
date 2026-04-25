@@ -60,7 +60,9 @@ def run_backtest(
 
     # Long-short portfolio returns
     z_scores = np.apply_along_axis(zscore_rank, 1, scores_arr)
-    weights  = np.clip(z_scores / z_scores.sum(axis=1, keepdims=True), -0.2, 0.2)
+    z_sum    = z_scores.sum(axis=1, keepdims=True)
+    z_sum    = np.where(np.abs(z_sum) < 1e-8, 1.0, z_sum)   # avoid divide-by-zero
+    weights  = np.clip(z_scores / z_sum, -0.2, 0.2)
     port_r   = (weights * actuals_arr).sum(axis=1)
     equity   = np.cumprod(1 + port_r)
 
