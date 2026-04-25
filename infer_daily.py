@@ -14,7 +14,7 @@ from pathlib import Path
 import torch
 
 from config import load_config
-from loader import UNIVERSE_MAP, get_universe_data, load_master_data
+from loader import get_universe_data, load_master_data
 from logging_utils import get_logger
 from ltc_model import LTCModel
 from preprocessor import preprocess
