@@ -92,7 +92,7 @@ def cmd_eval(args) -> None:
     test_dates = features.index[features.index > cfg.data.val_end].tolist()
 
     from backtester import run_backtest
-    run_backtest(model, test_loader, tickers[:n_etf], test_dates,
+    run_backtest(model, test_loader, list(returns_df.columns), test_dates,
                  device, cfg.scoring.mc_passes, cfg.scoring.alpha_amp,
                  cfg.output.results_dir)
 
