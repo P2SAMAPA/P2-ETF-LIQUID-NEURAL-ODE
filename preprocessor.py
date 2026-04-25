@@ -24,10 +24,15 @@ def modwt_denoise(series: pd.Series, wavelet: str = WAVELET, level: int = WV_LEV
     """Apply MODWT (à-trous) denoising via soft-thresholding.
 
     Returns a denoised series with the same index as input.
+    Level is automatically capped to the max supported by the data length.
     """
     values = series.ffill().fillna(0.0).values.astype(float)
-    coeffs = pywt.swt(values, wavelet=wavelet, level=level, trim_approx=False)
-    # Soft-threshold detail coefficients; keep approximation
+    # Cap level to what PyWavelets supports for this data length
+    max_level = pywt.swt_max_level(len(values))
+    actual_level = min(level, max_level)
+    if actual_level < 1:
+        return series.copy()
+    coeffs = pywt.swt(values, wavelet=wavelet, level=actual_level, trim_approx=False)
     denoised_coeffs = []
     for i, (approx, detail) in enumerate(coeffs):
         if i < len(coeffs) - 1:
