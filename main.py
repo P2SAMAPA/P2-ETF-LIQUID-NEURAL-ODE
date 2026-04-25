@@ -47,7 +47,6 @@ def cmd_train(args) -> None:
     returns_df, macro_df = get_universe_data(df, args.universe)
     features, delta_t    = preprocess(returns_df, macro_df, cfg.data.window)
 
-    tickers = UNIVERSE_MAP[args.universe]
     n_etf     = len(returns_df.columns)
     input_dim = features.shape[1]
     log.info("n_etf=%d  input_dim=%d", n_etf, input_dim)
@@ -75,7 +74,6 @@ def cmd_eval(args) -> None:
     returns_df, macro_df = get_universe_data(df, args.universe)
     features, delta_t    = preprocess(returns_df, macro_df, cfg.data.window)
 
-    tickers = UNIVERSE_MAP[args.universe]
     n_etf     = len(returns_df.columns)
     input_dim = features.shape[1]
     log.info("n_etf=%d  input_dim=%d", n_etf, input_dim)
