@@ -1,0 +1,5 @@
+[universe]
+name      = "fi"
+label     = "FI/Commodities"
+benchmark = "AGG"
+tickers   = ["TLT", "VCIT", "LQD", "HYG", "VNQ", "GLD", "SLV"]

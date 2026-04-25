@@ -1,0 +1,7 @@
+[universe]
+name      = "combined"
+label     = "Combined"
+benchmark = "SPY"
+tickers   = ["TLT", "VCIT", "LQD", "HYG", "VNQ", "GLD", "SLV",
+             "SPY", "QQQ", "XLK", "XLF", "XLE", "XLV", "XLI",
+             "XLY", "XLP", "XLU", "GDX", "XME", "IWM"]

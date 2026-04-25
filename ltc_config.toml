@@ -1,0 +1,48 @@
+# P2-ETF-LIQUID-NEURAL-ODE · Master Configuration
+# Loaded by config.py (Pydantic BaseSettings)
+
+[model]
+n_neurons       = 64          # Total LTC neurons
+n_sensory       = 32          # Sensory neuron count
+n_inter         = 24          # Inter neuron count
+n_command       = 16          # Command neuron count
+tau_min         = 0.1         # Minimum time constant (days)
+tau_max         = 10.0        # Maximum time constant (days)
+sparsity        = 0.6         # NCP wiring sparsity
+use_closed_form = false       # Switch to closed-form at inference
+input_dim       = 14          # Feature dimension (returns + macro)
+dropout         = 0.1         # MC Dropout probability
+
+[training]
+lr              = 1e-3
+weight_decay    = 1e-4
+epochs          = 300
+patience        = 25          # Early stopping patience (val Sharpe)
+batch_size      = 32
+grad_clip       = 1.0
+sharpe_lambda   = 0.1         # IC loss weight in total loss
+warmup_epochs   = 5
+seed            = 42
+
+[ode]
+method          = "dopri5"    # ODE solver
+rtol            = 1e-3
+atol            = 1e-4
+adjoint         = true        # Use adjoint method for backprop
+
+[data]
+window          = 63          # Rolling lookback window (days)
+hf_repo         = "P2SAMAPA/fi-etf-macro-signal-master-data"
+parquet_file    = "master_data.parquet"
+train_end       = "2019-12-31"
+val_end         = "2022-12-31"
+
+[scoring]
+alpha_amp       = 0.3         # Regime amplification factor
+mc_passes       = 50          # MC Dropout inference passes
+ci_level        = 0.95        # Credible interval level
+
+[output]
+hf_results_repo = "P2SAMAPA/p2-etf-liquid-neural-ode-results"
+checkpoint_dir  = "checkpoints"
+results_dir     = "results"

@@ -1,0 +1,45 @@
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+.venv/
+venv/
+env/
+.env
+
+# Build
+dist/
+build/
+*.egg-info/
+.eggs/
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+
+# Checkpoints & results (large files — push via DVC or HF)
+checkpoints/*.pt
+checkpoints/*.pth
+results/*.csv
+results/*.json
+results/*.parquet
+
+# Notebooks checkpoints
+.ipynb_checkpoints/
+
+# Data cache
+*.parquet
+*.feather
+*.h5
+data_cache/
+
+# Wandb
+wandb/
+
+# OS
+.DS_Store
+Thumbs.db

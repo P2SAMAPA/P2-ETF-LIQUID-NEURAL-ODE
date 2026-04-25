@@ -1,0 +1,5 @@
+[universe]
+name      = "equity"
+label     = "Equity Sectors"
+benchmark = "SPY"
+tickers   = ["SPY", "QQQ", "XLK", "XLF", "XLE", "XLV", "XLI", "XLY", "XLP", "XLU", "GDX", "XME", "IWM"]
