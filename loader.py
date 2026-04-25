@@ -37,8 +37,9 @@ UNIVERSE_MAP = {
 # Exact macro column names as they appear in master_data.parquet
 MACRO_COLS = ["VIX", "DXY", "T10Y2Y", "TBILL_3M", "IG_SPREAD", "HY_SPREAD"]
 
-# Column to drop — parquet index artefact
+# Columns to drop — parquet artefact and benchmark tickers (not return targets)
 _DROP_COLS = ["__index_level_0__"]
+_BENCHMARK_COLS = ["AGG"]  # benchmark only — exclude from return targets
 
 
 def load_master_data(
@@ -96,7 +97,7 @@ def get_universe_data(
     tickers = UNIVERSE_MAP[universe]
 
     # Return cols — plain ticker names
-    ret_cols = [t for t in tickers if t in df.columns]
+    ret_cols = [t for t in tickers if t in df.columns and t not in _BENCHMARK_COLS]
     missing = [t for t in tickers if t not in df.columns]
     if missing:
         log.warning("Tickers not found in parquet (skipped): %s", missing)
