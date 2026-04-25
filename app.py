@@ -31,6 +31,7 @@ SLOW_THRESHOLD   = 5.0
 FI_TICKERS = ["TLT", "VCIT", "LQD", "HYG", "VNQ", "GLD", "SLV"]
 EQ_TICKERS = ["SPY", "QQQ", "XLK", "XLF", "XLE", "XLV", "XLI",
                "XLY", "XLP", "XLU", "GDX", "XME", "IWM"]
+EXT_TICKERS = ["IWF", "XSD", "XBI", "XLB", "XLRE"]
 
 UNIVERSE_COLOURS = {
     "TLT": "#1B4F8A", "VCIT": "#2E86C1", "LQD": "#148F77",
@@ -39,6 +40,8 @@ UNIVERSE_COLOURS = {
     "XLE": "#784212", "XLV": "#1D8348", "XLI": "#2471A3", "XLY": "#7D6608",
     "XLP": "#6E2F83", "XLU": "#17202A", "GDX": "#B7950B", "XME": "#5D6D7E",
     "IWM": "#E74C3C",
+    "IWF": "#1ABC9C", "XSD": "#8E44AD", "XBI": "#E67E22",
+    "XLB": "#2ECC71", "XLRE": "#F39C12",
 }
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
