@@ -36,7 +36,6 @@ def run_daily_inference(universe: str = "combined", config_path: str = "ltc_conf
     returns_df, macro_df = get_universe_data(df, universe)
     features, delta_t    = preprocess(returns_df, macro_df, cfg.data.window)
 
-    tickers = UNIVERSE_MAP[universe]
     n_etf = len(returns_df.columns)
     input_dim = features.shape[1]
     active_tickers = list(returns_df.columns)
