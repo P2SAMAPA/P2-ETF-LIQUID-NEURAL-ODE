@@ -1,0 +1,237 @@
+name: Train LTC Model (CPU)
+
+on:
+  workflow_dispatch:          # manual trigger only — you kick this off once
+    inputs:
+      universe:
+        description: "Universe to train"
+        required: true
+        default: "combined"
+        type: choice
+        options: [combined, fi, equity]
+      epochs:
+        description: "Max epochs (recommend 60 for free CPU)"
+        required: true
+        default: "60"
+      quick_test:
+        description: "Quick smoke test (5 epochs, tiny model)"
+        required: false
+        default: "false"
+        type: boolean
+
+jobs:
+  train:
+    name: Train LIQUID-NEURAL-ODE on CPU
+    runs-on: ubuntu-latest
+    timeout-minutes: 340        # just under GitHub's 6-hour free limit
+
+    steps:
+      # ── 1. Checkout ────────────────────────────────────────────────────────
+      - uses: actions/checkout@v4
+
+      # ── 2. Python ─────────────────────────────────────────────────────────
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      # ── 3. Install CPU-only torch first (much smaller download) ───────────
+      - name: Install PyTorch CPU
+        run: |
+          pip install torch==2.1.0+cpu --index-url https://download.pytorch.org/whl/cpu
+
+      # ── 4. Install remaining deps ─────────────────────────────────────────
+      - name: Install dependencies
+        run: |
+          pip install torchdiffeq==0.2.3 ncps==0.0.7 PyWavelets==1.4.1 \
+                      pandas numpy scikit-learn scipy \
+                      huggingface_hub datasets pydantic pydantic-settings rich
+
+      # ── 5. Write CPU-optimised config override ────────────────────────────
+      - name: Write CPU training config
+        run: |
+          cat > cpu_train_config.toml << 'EOF'
+          [model]
+          n_neurons       = 32          # halved from 64
+          n_sensory       = 16
+          n_inter         = 12
+          n_command       = 8
+          tau_min         = 0.1
+          tau_max         = 10.0
+          sparsity        = 0.6
+          use_closed_form = true        # no ODE solver — 10x faster on CPU
+          input_dim       = 14
+          dropout         = 0.1
+
+          [training]
+          lr              = 5e-4
+          weight_decay    = 1e-4
+          epochs          = ${{ github.event.inputs.epochs }}
+          patience        = 15
+          batch_size      = 16          # smaller batches for 7GB RAM
+          grad_clip       = 1.0
+          sharpe_lambda   = 0.1
+          warmup_epochs   = 3
+          seed            = 42
+
+          [ode]
+          method          = "euler"     # fastest solver, fine for closed_form path
+          rtol            = 1e-2
+          atol            = 1e-3
+          adjoint         = false       # adjoint not needed for closed_form
+
+          [data]
+          window          = 42          # reduced from 63
+          hf_repo         = "P2SAMAPA/fi-etf-macro-signal-master-data"
+          parquet_file    = "master_data.parquet"
+          train_end       = "2019-12-31"
+          val_end         = "2022-12-31"
+
+          [scoring]
+          alpha_amp       = 0.3
+          mc_passes       = 20          # reduced from 50
+          ci_level        = 0.95
+
+          [output]
+          hf_results_repo = "P2SAMAPA/p2-etf-liquid-neural-ode-results"
+          checkpoint_dir  = "checkpoints"
+          results_dir     = "results"
+          EOF
+
+      # ── 6. Quick smoke test override (optional) ───────────────────────────
+      - name: Override to quick smoke test config
+        if: ${{ github.event.inputs.quick_test == 'true' }}
+        run: |
+          sed -i 's/epochs.*=.*/epochs = 5/' cpu_train_config.toml
+          sed -i 's/n_neurons.*=.*/n_neurons = 16/' cpu_train_config.toml
+          sed -i 's/n_sensory.*=.*/n_sensory = 8/' cpu_train_config.toml
+          sed -i 's/n_inter.*=.*/n_inter = 6/' cpu_train_config.toml
+          sed -i 's/n_command.*=.*/n_command = 4/' cpu_train_config.toml
+          sed -i 's/batch_size.*=.*/batch_size = 8/' cpu_train_config.toml
+          sed -i 's/window.*=.*/window = 21/' cpu_train_config.toml
+          echo "Quick test config active — 5 epochs, tiny model"
+
+      # ── 7. Download input data from HF ────────────────────────────────────
+      - name: Download master data from HuggingFace
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          python - << 'EOF'
+          import os
+          from huggingface_hub import hf_hub_download
+          path = hf_hub_download(
+              repo_id="P2SAMAPA/fi-etf-macro-signal-master-data",
+              filename="master_data.parquet",
+              repo_type="dataset",
+              token=os.environ.get("HF_TOKEN"),
+          )
+          print(f"Data downloaded to: {path}")
+          EOF
+
+      # ── 8. Train ──────────────────────────────────────────────────────────
+      - name: Train model
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          OMP_NUM_THREADS: "2"          # match GitHub Actions 2-core CPU
+          MKL_NUM_THREADS: "2"
+        run: |
+          mkdir -p checkpoints results
+          python train.py \
+            --universe ${{ github.event.inputs.universe }} \
+            --config cpu_train_config.toml
+
+      # ── 9. Print metrics ──────────────────────────────────────────────────
+      - name: Print training results
+        run: |
+          echo "=== Checkpoint ==="
+          ls -lh checkpoints/
+          if [ -f results/tau_log.json ]; then
+            echo "=== Last 5 τ log entries ==="
+            python -c "
+          import json
+          with open('results/tau_log.json') as f:
+              log = json.load(f)
+          for r in log[-5:]:
+              print(r)
+            "
+          fi
+
+      # ── 10. Upload checkpoint as GitHub Actions artifact ──────────────────
+      - name: Upload checkpoint artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ltc-checkpoint-${{ github.event.inputs.universe }}-${{ github.run_id }}
+          path: |
+            checkpoints/best_val_sharpe.pt
+            results/tau_log.json
+            cpu_train_config.toml
+          retention-days: 90
+
+      # ── 11. Push checkpoint to HuggingFace Model Hub ─────────────────────
+      - name: Push checkpoint to HuggingFace
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          python - << 'EOF'
+          import os
+          from huggingface_hub import HfApi
+
+          api   = HfApi()
+          token = os.environ["HF_TOKEN"]
+          repo  = "P2SAMAPA/P2-ETF-LIQUID-NEURAL-ODE"
+
+          # Create model repo if it doesn't exist yet
+          try:
+              api.create_repo(repo_id=repo, repo_type="model",
+                              token=token, exist_ok=True)
+          except Exception as e:
+              print(f"Repo creation skipped: {e}")
+
+          # Upload checkpoint
+          api.upload_file(
+              path_or_fileobj="checkpoints/best_val_sharpe.pt",
+              path_in_repo="checkpoints/best_val_sharpe.pt",
+              repo_id=repo,
+              repo_type="model",
+              token=token,
+          )
+          print("Checkpoint pushed to HF model repo.")
+
+          # Upload config used for this run
+          api.upload_file(
+              path_or_fileobj="cpu_train_config.toml",
+              path_in_repo="cpu_train_config.toml",
+              repo_id=repo,
+              repo_type="model",
+              token=token,
+          )
+          print("Config pushed.")
+          EOF
+
+      # ── 12. Run evaluation on test set ───────────────────────────────────
+      - name: Evaluate on test set
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          python evaluate.py \
+            --universe ${{ github.event.inputs.universe }} \
+            --config cpu_train_config.toml \
+            --checkpoint checkpoints/best_val_sharpe.pt
+
+      # ── 13. Print final metrics ───────────────────────────────────────────
+      - name: Print evaluation metrics
+        run: |
+          if [ -f results/metrics.json ]; then
+            echo "=== Test Set Metrics ==="
+            cat results/metrics.json
+          fi
+
+      # ── 14. Upload evaluation results as artifact ─────────────────────────
+      - name: Upload evaluation artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ltc-results-${{ github.event.inputs.universe }}-${{ github.run_id }}
+          path: |
+            results/equity_curve.csv
+            results/metrics.json
+          retention-days: 90
