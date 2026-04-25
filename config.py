@@ -1,14 +1,13 @@
 """config.py — Pydantic BaseSettings for P2-ETF-LIQUID-NEURAL-ODE.
 
 Loads ltc_config.toml (or a custom path) and validates all hyperparameters.
-Environment variables with prefix LTC_ override toml values.
 """
 from __future__ import annotations
 
 import sys
 from pathlib import Path
-from typing import Literal  # noqa: F401 — kept for downstream type hints
 
+# tomllib is stdlib in 3.11+; fall back to tomli on 3.10
 if sys.version_info >= (3, 11):
     import tomllib
 else:
