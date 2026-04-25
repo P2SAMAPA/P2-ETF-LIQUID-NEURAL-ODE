@@ -1,3 +1,4 @@
+# ruff: noqa: I001
 """test_backtester.py — Smoke tests for the walk-forward backtester."""
 from __future__ import annotations
 
