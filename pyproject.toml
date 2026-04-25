@@ -12,10 +12,12 @@ license = { text = "MIT" }
 authors = [{ name = "P2SAMAPA" }]
 
 dependencies = [
+    "setuptools>=68.0.0",
+    "numpy>=1.24.0,<2.0.0",
     "torch>=2.1.0",
     "torchdiffeq==0.2.3",
     "ncps==0.0.7",
-    "PyWavelets==1.4.1",
+    "PyWavelets>=1.6.0",
     "pandas>=2.0.0",
     "numpy>=1.24.0",
     "scikit-learn>=1.3.0",
