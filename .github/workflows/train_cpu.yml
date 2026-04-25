@@ -55,7 +55,7 @@ jobs:
           tau_max         = 10.0
           sparsity        = 0.6
           use_closed_form = true
-          input_dim       = 14
+          input_dim       = 0           # auto-derived at runtime
           dropout         = 0.1
 
           [training]
