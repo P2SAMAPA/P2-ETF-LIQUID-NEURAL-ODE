@@ -37,13 +37,15 @@ def run_daily_inference(universe: str = "combined", config_path: str = "ltc_conf
     features, delta_t    = preprocess(returns_df, macro_df, cfg.data.window)
 
     tickers = UNIVERSE_MAP[universe]
-    n_etf   = len([t for t in tickers if f"{t}_log_return" in returns_df.columns])
-    active_tickers = [t for t in tickers if f"{t}_log_return" in returns_df.columns]
+    n_etf = len(returns_df.columns)
+    input_dim = features.shape[1]
+    active_tickers = list(returns_df.columns)
+    log.info("n_etf=%d  input_dim=%d", n_etf, input_dim)
 
     # Load model — override to use closed_form for speed
     m = cfg.model
     model = LTCModel(
-        input_dim=m.input_dim, hidden_dim=m.n_neurons, n_etf=n_etf,
+        input_dim=input_dim, hidden_dim=m.n_neurons, n_etf=n_etf,
         tau_min=m.tau_min, tau_max=m.tau_max, dropout=m.dropout,
         use_closed_form=True,   # fast inference
     ).to(device)
