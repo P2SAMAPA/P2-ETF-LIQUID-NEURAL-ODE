@@ -1,8 +1,9 @@
+# ruff: noqa: I001
 """test_preprocessor.py — Tests for MODWT, z-score, and Δt encoding."""
 import numpy as np
 import pandas as pd
-import pytest
-from preprocessor import modwt_denoise, rolling_zscore, compute_delta_t, preprocess
+
+from preprocessor import compute_delta_t, modwt_denoise, preprocess, rolling_zscore
 
 
 def make_series(n=100, seed=0):
