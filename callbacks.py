@@ -44,13 +44,13 @@ class ModelCheckpoint:
         self.best_path  = self.dir / "best_val_sharpe.pt"
 
     def __call__(self, model: nn.Module, val_sharpe: float, epoch: int) -> bool:
-        """Save if improved.
+        """Save if improved, or on the very first epoch as a safety baseline.
 
         Returns:
             True if a new checkpoint was saved.
         """
-        if val_sharpe > self.best_score:
-            self.best_score = val_sharpe
+        if val_sharpe > self.best_score or epoch == 1:
+            self.best_score = max(val_sharpe, self.best_score)
             torch.save(
                 {"epoch": epoch, "val_sharpe": val_sharpe, "state_dict": model.state_dict()},
                 self.best_path,
