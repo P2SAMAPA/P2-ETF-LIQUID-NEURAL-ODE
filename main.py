@@ -85,7 +85,13 @@ def cmd_eval(args) -> None:
     )
 
     model = build_model(cfg, n_etf, input_dim)
-    ckpt  = torch.load(args.checkpoint, map_location=device)
+    ckpt_path = args.checkpoint
+    if not __import__("pathlib").Path(ckpt_path).exists():
+        raise FileNotFoundError(
+            f"Checkpoint not found: {ckpt_path}\n"
+            "Run train.py first to generate a checkpoint."
+        )
+    ckpt  = torch.load(ckpt_path, map_location=device, weights_only=True)
     model.load_state_dict(ckpt["state_dict"])
     model = model.to(device)
 
