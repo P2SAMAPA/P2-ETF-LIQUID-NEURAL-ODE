@@ -90,7 +90,9 @@ def load_results() -> tuple[pd.DataFrame, bool]:
 
         hf_token = os.environ.get("HF_TOKEN")
         # FIX: No pinned revision/commit hash — always loads latest main branch
-        ds = load_dataset(HF_RESULTS_REPO, split="train", token=hf_token if hf_token else None)
+        ds = load_dataset(
+            HF_RESULTS_REPO, split="train", token=hf_token if hf_token else None
+        )
         df = ds.to_pandas()
 
         if df.empty:
@@ -230,15 +232,16 @@ st.markdown("# 💧 Liquid Neural ODE · ETF Rankings")
 st.caption(
     f"Engine: **LIQUID-NEURAL-ODE** · Universe: **{universe_opt.upper()}** · "
     f"Latest date: **{latest_date.date()}** · "
-    f"{len(df_today)} ETFs scored"
-    + (" · ⚠️ DEMO DATA" if is_demo else " · ✅ Live")
+    f"{len(df_today)} ETFs scored" + (" · ⚠️ DEMO DATA" if is_demo else " · ✅ Live")
 )
 
 # ── KPI row ───────────────────────────────────────────────────────────────────
 tau_today = df_today["tau_mean"].mean()
 fast_today = df_today["fast_frac"].mean()
 slow_today = (
-    1.0 - fast_today - max(0, 1.0 - fast_today - df_today.get("slow_frac", pd.Series([0.0])).mean())
+    1.0
+    - fast_today
+    - max(0, 1.0 - fast_today - df_today.get("slow_frac", pd.Series([0.0])).mean())
 )
 rlabel, rcolour = regime_label(fast_today, slow_today)
 
@@ -428,7 +431,9 @@ with tab2:
             aspect="auto",
             height=400,
         )
-        fig_heat.update_layout(paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)")
+        fig_heat.update_layout(
+            paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)"
+        )
         st.plotly_chart(fig_heat, use_container_width=True)
     except ImportError:
         st.dataframe(rank_pivot.T)
@@ -587,7 +592,16 @@ with tab4:
             st.plotly_chart(fig4, use_container_width=True)
         except ImportError:
             st.dataframe(
-                df_ci[["ticker", "score_adj", "ci_lower", "ci_upper", "ci_width", "conviction"]]
+                df_ci[
+                    [
+                        "ticker",
+                        "score_adj",
+                        "ci_lower",
+                        "ci_upper",
+                        "ci_width",
+                        "conviction",
+                    ]
+                ]
             )
 
         # Conviction table
@@ -601,7 +615,9 @@ with tab4:
                     "conviction": "Conviction",
                 }
             )
-            .style.format({"Score (z)": "{:.3f}", "CI Width": "{:.3f}", "Conviction": "{:.2f}"}),
+            .style.format(
+                {"Score (z)": "{:.3f}", "CI Width": "{:.3f}", "Conviction": "{:.2f}"}
+            ),
             use_container_width=True,
             height=320,
         )
