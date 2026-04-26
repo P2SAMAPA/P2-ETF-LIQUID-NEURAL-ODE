@@ -83,19 +83,31 @@ UNIVERSE_COLOURS = {
 
 
 @st.cache_data(ttl=3600, show_spinner="Loading results from HuggingFace…")
-def load_results() -> pd.DataFrame:
-    """Load scores from HF Dataset. Falls back to synthetic demo data."""
+def load_results() -> tuple[pd.DataFrame, bool]:
+    """Load scores from HF Dataset. Returns (df, is_demo). Falls back to synthetic demo data."""
     try:
         from datasets import load_dataset
 
         hf_token = os.environ.get("HF_TOKEN")
+        # FIX: No pinned revision/commit hash — always loads latest main branch
         ds = load_dataset(HF_RESULTS_REPO, split="train", token=hf_token if hf_token else None)
         df = ds.to_pandas()
+
+        if df.empty:
+            raise ValueError("Dataset loaded but contains no rows.")
+
         df["date"] = pd.to_datetime(df["date"])
-        return df.sort_values("date")
+
+        # Ensure universe column exists
+        if "universe" not in df.columns:
+            df["universe"] = df["ticker"].apply(
+                lambda t: "fi" if t in FI_TICKERS else "equity"
+            )
+
+        return df.sort_values("date"), False  # (data, is_demo=False)
     except Exception as e:
         st.warning(f"Could not load HF dataset ({e}). Showing synthetic demo data.")
-        return _synthetic_demo()
+        return _synthetic_demo(), True  # (data, is_demo=True)
 
 
 def _synthetic_demo() -> pd.DataFrame:
@@ -190,7 +202,14 @@ with st.sidebar:
         st.rerun()
 
 # ── Load & filter data ────────────────────────────────────────────────────────
-df_all = load_results()
+df_all, is_demo = load_results()
+
+if is_demo:
+    st.info(
+        "📊 Displaying **synthetic demo data**. "
+        "Live results will appear automatically after the next GitHub Actions training run "
+        "pushes scores to the HuggingFace dataset."
+    )
 
 # Universe filter
 if universe_opt != "combined":
@@ -212,6 +231,7 @@ st.caption(
     f"Engine: **LIQUID-NEURAL-ODE** · Universe: **{universe_opt.upper()}** · "
     f"Latest date: **{latest_date.date()}** · "
     f"{len(df_today)} ETFs scored"
+    + (" · ⚠️ DEMO DATA" if is_demo else " · ✅ Live")
 )
 
 # ── KPI row ───────────────────────────────────────────────────────────────────
