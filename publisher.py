@@ -1,10 +1,10 @@
 """publisher.py — Push daily scores to HuggingFace Dataset.
-
 Target: P2SAMAPA/p2-etf-liquid-neural-ode-results
 """
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 import pandas as pd
@@ -24,41 +24,61 @@ def push_results(
 ) -> None:
     """Append new results to the HF Dataset.
 
-    The dataset stores all historical daily scores. Each call appends
-    new rows without overwriting existing data.
+    The dataset stores all historical daily scores. Each call merges new rows,
+    deduplicating by (date, ticker, universe) so re-runs don't create duplicates.
 
     Args:
         results_df: DataFrame with columns matching the results schema.
         hf_repo:    HF dataset repository ID.
         token:      HF write token (reads HF_TOKEN env var if None).
     """
-    import os
-
     hf_token = token or os.environ.get("HF_TOKEN")
     if not hf_token:
         raise EnvironmentError("Set HF_TOKEN environment variable or pass token=")
 
     log.info("Pushing %d rows to %s", len(results_df), hf_repo)
 
-    # Convert date column to string for parquet compatibility
+    # Normalise date column to string for parquet compatibility
     df = results_df.copy()
     if pd.api.types.is_datetime64_any_dtype(df["date"]):
         df["date"] = df["date"].dt.strftime("%Y-%m-%d")
+    else:
+        df["date"] = pd.to_datetime(df["date"]).dt.strftime("%Y-%m-%d")
 
-    new_ds = Dataset.from_pandas(df, preserve_index=False)
-
+    # Merge with existing dataset to preserve history
     try:
         existing = load_dataset(hf_repo, split="train", token=hf_token)
-        combined = Dataset.from_pandas(
-            pd.concat([existing.to_pandas(), df], ignore_index=True),
-            preserve_index=False,
-        )
-    except Exception:
-        log.warning("No existing dataset found — creating fresh.")
-        combined = new_ds
+        df_existing = existing.to_pandas()
+        df_existing["date"] = pd.to_datetime(df_existing["date"]).dt.strftime("%Y-%m-%d")
 
-    combined.push_to_hub(hf_repo, token=hf_token)
-    log.info("Results pushed successfully → %s", hf_repo)
+        # Deduplicate: drop existing rows that will be replaced by new ones
+        # Key = (date, ticker, universe)
+        dedup_cols = [
+            c
+            for c in ["date", "ticker", "universe"]
+            if c in df_existing.columns and c in df.columns
+        ]
+        if dedup_cols:
+            new_keys = set(zip(*[df[c] for c in dedup_cols]))
+            mask = ~pd.Series(list(zip(*[df_existing[c] for c in dedup_cols]))).isin(new_keys)
+            df_existing = df_existing[mask.values]
+
+        combined = pd.concat([df_existing, df], ignore_index=True)
+        log.info(
+            "Merged: %d existing + %d new = %d total rows", len(df_existing), len(df), len(combined)
+        )
+    except Exception as exc:
+        log.warning("No existing dataset found (%s) — creating fresh.", exc)
+        combined = df
+
+    combined = combined.sort_values(
+        [c for c in ["date", "universe", "ticker"] if c in combined.columns]
+    ).reset_index(drop=True)
+
+    # Push with explicit split="train" — required for empty repos
+    dataset = Dataset.from_pandas(combined, preserve_index=False)
+    dataset.push_to_hub(hf_repo, split="train", token=hf_token)
+    log.info("Results pushed successfully → %s  (%d rows)", hf_repo, len(combined))
 
 
 def save_results_locally(
