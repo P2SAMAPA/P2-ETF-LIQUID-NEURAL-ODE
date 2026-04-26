@@ -90,9 +90,7 @@ def load_results() -> tuple[pd.DataFrame, bool]:
 
         hf_token = os.environ.get("HF_TOKEN")
         # FIX: No pinned revision/commit hash — always loads latest main branch
-        ds = load_dataset(
-            HF_RESULTS_REPO, split="train", token=hf_token if hf_token else None
-        )
+        ds = load_dataset(HF_RESULTS_REPO, split="train", token=hf_token if hf_token else None)
         df = ds.to_pandas()
 
         if df.empty:
@@ -102,9 +100,7 @@ def load_results() -> tuple[pd.DataFrame, bool]:
 
         # Ensure universe column exists
         if "universe" not in df.columns:
-            df["universe"] = df["ticker"].apply(
-                lambda t: "fi" if t in FI_TICKERS else "equity"
-            )
+            df["universe"] = df["ticker"].apply(lambda t: "fi" if t in FI_TICKERS else "equity")
 
         return df.sort_values("date"), False  # (data, is_demo=False)
     except Exception as e:
@@ -239,9 +235,7 @@ st.caption(
 tau_today = df_today["tau_mean"].mean()
 fast_today = df_today["fast_frac"].mean()
 slow_today = (
-    1.0
-    - fast_today
-    - max(0, 1.0 - fast_today - df_today.get("slow_frac", pd.Series([0.0])).mean())
+    1.0 - fast_today - max(0, 1.0 - fast_today - df_today.get("slow_frac", pd.Series([0.0])).mean())
 )
 rlabel, rcolour = regime_label(fast_today, slow_today)
 
@@ -431,9 +425,7 @@ with tab2:
             aspect="auto",
             height=400,
         )
-        fig_heat.update_layout(
-            paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)"
-        )
+        fig_heat.update_layout(paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)")
         st.plotly_chart(fig_heat, use_container_width=True)
     except ImportError:
         st.dataframe(rank_pivot.T)
@@ -615,9 +607,7 @@ with tab4:
                     "conviction": "Conviction",
                 }
             )
-            .style.format(
-                {"Score (z)": "{:.3f}", "CI Width": "{:.3f}", "Conviction": "{:.2f}"}
-            ),
+            .style.format({"Score (z)": "{:.3f}", "CI Width": "{:.3f}", "Conviction": "{:.2f}"}),
             use_container_width=True,
             height=320,
         )
