@@ -167,85 +167,49 @@ jobs:
             cat results/metrics.json
           fi
 
-      # ── FIX: Push daily scores to the HF Dataset so the Streamlit app loads real data ──
-      - name: Push scores to HuggingFace Dataset — ${{ matrix.universe }}
+
+      - name: List results directory — ${{ matrix.universe }}
+        if: always()
+        run: |
+          echo "=== Contents of results/ ==="
+          ls -lh results/ 2>/dev/null || echo "(results/ directory not found)"
+
+      # ── Verify scores were pushed by backtester.py, re-push if needed ──────
+      - name: Verify & push scores to HuggingFace Dataset — ${{ matrix.universe }}
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: |
           python - << 'EOF'
-          import os
-          import json
+          import os, sys
           import pandas as pd
-          from datasets import Dataset, load_dataset
-          from huggingface_hub import login
+          from huggingface_hub import HfApi
 
-          login(token=os.environ["HF_TOKEN"])
-
+          UNIVERSE = "${{ matrix.universe }}"
           RESULTS_REPO = "P2SAMAPA/p2-etf-liquid-neural-ode-results"
-          UNIVERSE     = "${{ matrix.universe }}"
 
-          # ── 1. Collect scores produced by evaluate.py ──────────────────────
-          # evaluate.py must write results/scores.csv with columns:
-          #   date, ticker, score_raw, score_adj, ci_lower, ci_upper,
-          #   tau_mean, fast_frac, rank, universe
+          # backtester.py already called publisher.push_results() during evaluate.py.
+          # This step verifies scores.csv exists and re-pushes if the in-process
+          # push failed for any reason (e.g. transient network error).
           scores_path = "results/scores.csv"
           if not os.path.exists(scores_path):
-              print("WARNING: results/scores.csv not found — skipping HF dataset push.")
-              print("Ensure evaluate.py calls score_writer.write_scores() before exiting.")
-              exit(0)
+              print(f"ERROR: results/scores.csv not found after evaluate.py.")
+              print("backtester.py must be updated to save scores.csv — see fix.")
+              import glob
+              print(f"results/ contents: {glob.glob('results/*')}")
+              sys.exit(1)
 
-          df_new = pd.read_csv(scores_path)
+          df = pd.read_csv(scores_path)
+          print(f"✅ scores.csv found: {len(df)} rows, columns: {list(df.columns)}")
 
-          # Validate required columns are present before proceeding
-          required_cols = {"date", "ticker", "score_adj"}
-          missing = required_cols - set(df_new.columns)
-          if missing:
-              print(f"ERROR: scores.csv is missing required columns: {missing}")
-              print(f"Found columns: {list(df_new.columns)}")
-              exit(1)
-          df_new["date"] = pd.to_datetime(df_new["date"]).dt.strftime("%Y-%m-%d")
-          if "universe" not in df_new.columns:
-              df_new["universe"] = UNIVERSE
+          # Re-push to guarantee delivery (push_results deduplicates, so safe to call twice)
+          from publisher import push_results
+          push_results(df, token=os.environ["HF_TOKEN"])
+          print(f"✅ {UNIVERSE}: {len(df)} rows confirmed in HF dataset")
 
-          # ── 2. Merge with existing dataset (keep history) ──────────────────
-          try:
-              existing = load_dataset(RESULTS_REPO, split="train")
-              df_existing = existing.to_pandas()
-              df_existing["date"] = pd.to_datetime(df_existing["date"]).dt.strftime("%Y-%m-%d")
-
-              # Drop rows for same universe+dates we're about to overwrite
-              new_dates = set(df_new["date"].unique())
-              mask = ~(
-                  (df_existing["universe"] == UNIVERSE) &
-                  (df_existing["date"].isin(new_dates))
-              )
-              df_existing = df_existing[mask]
-
-              df_combined = pd.concat([df_existing, df_new], ignore_index=True)
-              print(f"Merged: {len(df_existing)} existing + {len(df_new)} new = {len(df_combined)} rows")
-
-          except Exception as e:
-              # Dataset is empty or doesn't exist yet — start fresh
-              print(f"Could not load existing dataset ({e}). Creating fresh.")
-              df_combined = df_new
-
-          df_combined = df_combined.sort_values(["date", "universe", "ticker"]).reset_index(drop=True)
-
-          # ── 3. Push to HuggingFace ──────────────────────────────────────────
-          dataset = Dataset.from_pandas(df_combined, preserve_index=False)
-          dataset.push_to_hub(
-              RESULTS_REPO,
-              split="train",
-              commit_message=f"[CI] {UNIVERSE} scores — run {os.environ.get('GITHUB_RUN_ID', 'manual')} sha {os.environ.get('GITHUB_SHA', '')[:8]}",
-          )
-          print(f"✅ Pushed {len(df_combined)} rows to {RESULTS_REPO}")
-
-          # ── 4. Also push equity_curve if present ───────────────────────────
+          # Upload equity_curve as a separate raw file
           ec_path = "results/equity_curve.csv"
           if os.path.exists(ec_path):
-              from huggingface_hub import HfApi
-              api = HfApi()
-              api.upload_file(
+              HfApi().upload_file(
                   path_or_fileobj=ec_path,
                   path_in_repo=f"equity_curves/{UNIVERSE}_equity_curve.csv",
                   repo_id=RESULTS_REPO,
