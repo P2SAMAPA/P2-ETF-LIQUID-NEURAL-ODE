@@ -1,5 +1,0 @@
-[universe]
-name      = "extended"
-label     = "Extended (Growth/Sector)"
-benchmark = "SPY"
-tickers   = ["IWF", "XSD", "XBI", "XLB", "XLRE"]
