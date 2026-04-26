@@ -2,7 +2,7 @@ name: Daily Inference
 
 on:
   schedule:
-    - cron: "30 22 * * 1-5"   # 22:30 UTC Mon-Fri (after US market close)
+    - cron: "00 02 * * 1-5"   # 00:02 UTC Mon-Fri (after US market close)
   workflow_dispatch:
 
 jobs:
@@ -12,7 +12,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        universe: [fi, equity, extended, combined]
+        universe: [fi, equity, combined]
 
     steps:
       - uses: actions/checkout@v4
