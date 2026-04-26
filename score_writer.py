@@ -64,9 +64,7 @@ def write_scores(
     )
 
     # Compute cross-sectional rank per date (1 = best score_adj)
-    df["rank"] = (
-        df.groupby("date")["score_adj"].rank(ascending=False, method="min").astype(int)
-    )
+    df["rank"] = df.groupby("date")["score_adj"].rank(ascending=False, method="min").astype(int)
 
     out_path = os.path.join(out_dir, "scores.csv")
     df.to_csv(out_path, index=False)
