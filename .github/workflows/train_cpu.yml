@@ -47,36 +47,36 @@ jobs:
         run: |
           cat > cpu_train_config.toml << 'EOF'
           [model]
-          n_neurons       = 32
+          n_neurons       = 32          # Smaller than GPU config to fit CPU RAM
           n_sensory       = 16
           n_inter         = 12
           n_command       = 8
           tau_min         = 0.1
           tau_max         = 10.0
           sparsity        = 0.6
-          use_closed_form = true
+          use_closed_form = true        # Closed-form avoids ODE stiffness entirely
           input_dim       = 0           # auto-derived at runtime
           dropout         = 0.1
 
           [training]
-          lr              = 5e-4
+          lr              = 1e-4        # Conservative LR — prevents NaN divergence on CPU
           weight_decay    = 1e-4
           epochs          = ${{ github.event.inputs.epochs }}
           patience        = 15
-          batch_size      = 16
-          grad_clip       = 1.0
+          batch_size      = 32          # Match GPU config batch size for stable gradients
+          grad_clip       = 0.5         # Tighter clip than GPU — CPU runs are noisier
           sharpe_lambda   = 0.1
-          warmup_epochs   = 3
+          warmup_epochs   = 5           # Match GPU config — more warmup = more stable
           seed            = 42
 
           [ode]
-          method          = "euler"
-          rtol            = 1e-2
-          atol            = 1e-3
-          adjoint         = false
+          method          = "rk4"       # Fixed-step RK4: stable on CPU, no adaptive overhead
+          rtol            = 1e-3        # Match GPU config tolerances
+          atol            = 1e-4
+          adjoint         = false       # Adjoint too slow on CPU; closed-form makes this moot
 
           [data]
-          window          = 42
+          window          = 63          # Match GPU config window
           hf_repo         = "P2SAMAPA/fi-etf-macro-signal-master-data"
           parquet_file    = "master_data.parquet"
           train_end       = "2019-12-31"
@@ -84,7 +84,7 @@ jobs:
 
           [scoring]
           alpha_amp       = 0.3
-          mc_passes       = 20
+          mc_passes       = 20          # Fewer passes than GPU (50) to save CPU time
           ci_level        = 0.95
 
           [output]
@@ -102,7 +102,7 @@ jobs:
           sed -i 's/^          n_inter.*/          n_inter = 6/'       cpu_train_config.toml
           sed -i 's/^          n_command.*/          n_command = 4/'   cpu_train_config.toml
           sed -i 's/^          batch_size.*/          batch_size = 8/' cpu_train_config.toml
-          sed -i 's/^          window.*/          window = 21/'         cpu_train_config.toml
+          # window kept at 63 — reducing it breaks the feature shape
           echo "Quick test config active — 5 epochs, tiny model"
 
       - name: Download master data from HuggingFace
