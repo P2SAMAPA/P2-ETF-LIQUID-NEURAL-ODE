@@ -30,8 +30,8 @@ SLOW_THRESHOLD   = 5.0
 
 FI_TICKERS = ["TLT", "VCIT", "LQD", "HYG", "VNQ", "GLD", "SLV"]
 EQ_TICKERS = ["SPY", "QQQ", "XLK", "XLF", "XLE", "XLV", "XLI",
-               "XLY", "XLP", "XLU", "GDX", "XME", "IWM"]
-EXT_TICKERS = ["IWF", "XSD", "XBI", "XLB", "XLRE"]
+               "XLY", "XLP", "XLU", "GDX", "XME", "IWM",
+               "IWF", "XSD", "XBI", "XLB", "XLRE"]
 
 UNIVERSE_COLOURS = {
     "TLT": "#1B4F8A", "VCIT": "#2E86C1", "LQD": "#148F77",
