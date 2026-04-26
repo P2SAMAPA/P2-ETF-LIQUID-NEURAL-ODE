@@ -257,7 +257,7 @@ with tab1:
                 "ci_lower": "CI Lower", "ci_upper": "CI Upper",
                 "tau_mean": "τ mean", "fast_frac": "Fast %",
             })
-            .style.background_gradient(subset=["Score (z)"], cmap="RdYlGn")
+            .style"], cmap="RdYlGn")
             .format({"Score (z)": "{:.3f}", "Score (raw)": "{:.4f}",
                      "CI Lower": "{:.3f}", "CI Upper": "{:.3f}",
                      "τ mean": "{:.2f}", "Fast %": "{:.1%}"}),
@@ -452,8 +452,7 @@ with tab4:
         st.dataframe(
             df_ci[["ticker", "score_adj", "ci_width", "conviction"]]
                 .rename(columns={"score_adj": "Score (z)", "ci_width": "CI Width", "conviction": "Conviction"})
-                .style.background_gradient(subset=["Conviction"], cmap="Greens")
-                .format({"Score (z)": "{:.3f}", "CI Width": "{:.3f}", "Conviction": "{:.2f}"}),
+                .style.format({"Score (z)": "{:.3f}", "CI Width": "{:.3f}", "Conviction": "{:.2f}"}),
             use_container_width=True,
             height=320,
         )
