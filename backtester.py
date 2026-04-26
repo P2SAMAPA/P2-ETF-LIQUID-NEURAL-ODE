@@ -118,10 +118,9 @@ def run_backtest(
         json.dump(results, f, indent=2)
 
     # 3. Per-ETF daily scores ← NEW
-    T = len(all_dates)
-    N = len(tickers)
+    n_days = len(all_dates)
     rows = []
-    for t in range(T):
+    for t in range(n_days):
         date_str = str(all_dates[t].date())
         z_row = z_scores[t]  # cross-sectional z-scores for ranking
         ranks = pd.Series(z_row).rank(ascending=False, method="min").astype(int).tolist()
