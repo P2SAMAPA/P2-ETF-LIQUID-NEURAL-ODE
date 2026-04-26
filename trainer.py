@@ -6,6 +6,8 @@ Early stopping on val Sharpe. Cosine LR with warmup.
 
 from __future__ import annotations
 
+import math
+
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
@@ -19,6 +21,10 @@ from scheduler import build_scheduler
 from tau_monitor import compute_regime_labels
 
 log = get_logger(__name__)
+
+
+def _is_finite(val: float) -> bool:
+    return math.isfinite(val)
 
 
 def train(
@@ -58,6 +64,11 @@ def train(
 
     history: dict[str, list[float]] = {"train_loss": [], "val_sharpe": [], "tau_mean": []}
 
+    # Save initial weights so we can roll back if NaN occurs
+    best_state = {k: v.clone() for k, v in model.state_dict().items()}
+    nan_streak = 0
+    MAX_NAN_STREAK = 3  # abort training if NaN persists this many epochs
+
     for epoch in range(1, cfg.training.epochs + 1):
 
         # ── Training pass ────────────────────────────────────────────────
@@ -65,6 +76,7 @@ def train(
         epoch_loss = 0.0
         tau_accum = 0.0
         n_batches = 0
+        skipped_batches = 0
 
         for x, dt, y in train_loader:
             x, dt, y = x.to(device), dt.to(device), y.to(device)
@@ -73,13 +85,51 @@ def train(
             scores, tau_dist = model(x, dt)
             loss, info = criterion(scores, y)
 
+            # ── NaN/Inf loss guard ───────────────────────────────────────
+            if not torch.isfinite(loss):
+                skipped_batches += 1
+                log.warning(
+                    "Non-finite loss (%.4g) at epoch %d — skipping batch", loss.item(), epoch
+                )
+                optimizer.zero_grad()
+                continue
+
             loss.backward()
+
+            # ── Gradient NaN guard ───────────────────────────────────────
+            grad_ok = all(
+                p.grad is None or torch.isfinite(p.grad).all() for p in model.parameters()
+            )
+            if not grad_ok:
+                skipped_batches += 1
+                log.warning("NaN gradient detected at epoch %d — skipping batch", epoch)
+                optimizer.zero_grad()
+                continue
+
             nn.utils.clip_grad_norm_(model.parameters(), cfg.training.grad_clip)
             optimizer.step()
 
+            # ── Parameter NaN guard — roll back if weights exploded ──────
+            param_ok = all(torch.isfinite(p).all() for p in model.parameters())
+            if not param_ok:
+                log.warning("NaN parameters after step at epoch %d — rolling back", epoch)
+                model.load_state_dict(best_state)
+                optimizer.zero_grad()
+                skipped_batches += 1
+                continue
+
             epoch_loss += loss.item()
-            tau_accum += tau_dist.mean().item()
+            tau_val = tau_dist.mean().item()
+            tau_accum += tau_val if _is_finite(tau_val) else 0.0
             n_batches += 1
+
+        if skipped_batches > 0:
+            log.warning(
+                "Epoch %d: skipped %d/%d batches due to NaN",
+                epoch,
+                skipped_batches,
+                skipped_batches + n_batches,
+            )
 
         avg_loss = epoch_loss / max(n_batches, 1)
         avg_tau = tau_accum / max(n_batches, 1)
@@ -88,6 +138,28 @@ def train(
         val_sharpe, val_fast_frac, val_slow_frac = _evaluate(model, val_loader, device)
 
         scheduler.step()
+
+        # ── NaN epoch guard ──────────────────────────────────────────────
+        if not _is_finite(val_sharpe) or not _is_finite(avg_loss):
+            nan_streak += 1
+            log.warning(
+                "Epoch %d: NaN metrics (loss=%.4g, val_sharpe=%.4g) — streak %d/%d",
+                epoch,
+                avg_loss,
+                val_sharpe,
+                nan_streak,
+                MAX_NAN_STREAK,
+            )
+            if nan_streak >= MAX_NAN_STREAK:
+                log.error("NaN persisted for %d epochs — aborting training.", MAX_NAN_STREAK)
+                break
+            # Use 0.0 as sentinel so early stopping / checkpointer skip this epoch
+            val_sharpe = 0.0
+            avg_loss = 0.0
+        else:
+            nan_streak = 0
+            # Update best_state only when weights are healthy
+            best_state = {k: v.clone() for k, v in model.state_dict().items()}
 
         # ── Logging ──────────────────────────────────────────────────────
         log_epoch(log, epoch, avg_loss, val_sharpe, avg_tau, val_fast_frac, universe="?")
@@ -140,13 +212,24 @@ def _evaluate(
     actuals_cat = torch.cat(all_actuals, dim=0)
     tau_cat = torch.cat(all_tau_dist, dim=0)
 
+    # Guard: if scores are all NaN return 0.0 instead of propagating NaN
+    if not torch.isfinite(scores_cat).any():
+        log.warning("All validation scores are non-finite — returning val_sharpe=0.0")
+        return 0.0, 0.0, 0.0
+
+    # Replace any residual NaN scores with 0 before computing portfolio weights
+    scores_cat = torch.nan_to_num(scores_cat, nan=0.0, posinf=0.0, neginf=0.0)
+
     # Portfolio returns from scores
     weights = torch.softmax(scores_cat, dim=-1) - 1.0 / scores_cat.size(-1)
     port_r = (weights * actuals_cat).sum(dim=-1).numpy()
     val_s = sharpe(port_r)
+    val_s = val_s if _is_finite(val_s) else 0.0
 
     regime = compute_regime_labels(tau_cat)
     fast_f = regime["fast_frac"].mean().item()
     slow_f = regime["slow_frac"].mean().item()
+    fast_f = fast_f if _is_finite(fast_f) else 0.0
+    slow_f = slow_f if _is_finite(slow_f) else 0.0
 
     return val_s, fast_f, slow_f
