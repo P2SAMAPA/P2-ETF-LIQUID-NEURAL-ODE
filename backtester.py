@@ -95,11 +95,16 @@ def run_backtest(
     equity = np.cumprod(1 + port_r)
 
     flat_ic = np.mean([ic(scores_arr[t], actuals_arr[t]) for t in range(len(port_r))])
+
+    def _safe(v: float) -> float:
+        """Return 0.0 for NaN/inf so JSON serialisation never fails."""
+        return float(v) if np.isfinite(v) else 0.0
+
     results = {
-        "sharpe": sharpe(port_r),
-        "max_drawdown": max_drawdown(equity),
-        "ic": flat_ic,
-        "hit_rate": hit_rate(scores_arr.ravel(), actuals_arr.ravel()),
+        "sharpe": _safe(sharpe(port_r)),
+        "max_drawdown": _safe(max_drawdown(equity)),
+        "ic": _safe(flat_ic),
+        "hit_rate": _safe(hit_rate(scores_arr.ravel(), actuals_arr.ravel())),
         "n_days": len(port_r),
     }
     log.info(
@@ -130,18 +135,31 @@ def run_backtest(
     for t in range(n_days):
         date_str = str(all_dates[t].date())
         z_row = z_scores[t]  # cross-sectional z-scores for ranking
-        ranks = pd.Series(z_row).rank(ascending=False, method="min").astype(int).tolist()
+
+        # Replace NaN/inf with 0 before ranking so untrained/diverged models don't crash
+        z_row_safe = np.where(np.isfinite(z_row), z_row, 0.0)
+        rank_series = pd.Series(z_row_safe).rank(ascending=False, method="min")
+        # Fill any residual NaN ranks (all-zero edge case) with mid-rank
+        rank_series = rank_series.fillna((len(tickers) + 1) / 2.0)
+        ranks = rank_series.astype(int).tolist()
+
         for i, ticker in enumerate(tickers):
             rows.append(
                 {
                     "date": date_str,
                     "ticker": ticker,
-                    "score_raw": float(scores_raw_arr[t, i]),
-                    "score_adj": float(scores_arr[t, i]),
-                    "ci_lower": float(ci_lower_arr[t, i]),
-                    "ci_upper": float(ci_upper_arr[t, i]),
-                    "tau_mean": float(tau_arr[t]),
-                    "fast_frac": float(fast_frac_arr[t]),
+                    "score_raw": (
+                        float(scores_raw_arr[t, i]) if np.isfinite(scores_raw_arr[t, i]) else 0.0
+                    ),
+                    "score_adj": float(scores_arr[t, i]) if np.isfinite(scores_arr[t, i]) else 0.0,
+                    "ci_lower": (
+                        float(ci_lower_arr[t, i]) if np.isfinite(ci_lower_arr[t, i]) else 0.0
+                    ),
+                    "ci_upper": (
+                        float(ci_upper_arr[t, i]) if np.isfinite(ci_upper_arr[t, i]) else 0.0
+                    ),
+                    "tau_mean": float(tau_arr[t]) if np.isfinite(tau_arr[t]) else 0.0,
+                    "fast_frac": float(fast_frac_arr[t]) if np.isfinite(fast_frac_arr[t]) else 0.0,
                     "rank": ranks[i],
                     "universe": universe,
                 }
