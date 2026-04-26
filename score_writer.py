@@ -49,23 +49,23 @@ def write_scores(
     """
     Path(out_dir).mkdir(parents=True, exist_ok=True)
 
-    df = pd.DataFrame({
-        "date":      pd.to_datetime(dates).strftime("%Y-%m-%d"),
-        "ticker":    list(tickers),
-        "score_raw": np.asarray(score_raw, dtype=float),
-        "score_adj": np.asarray(score_adj, dtype=float),
-        "ci_lower":  np.asarray(ci_lower,  dtype=float),
-        "ci_upper":  np.asarray(ci_upper,  dtype=float),
-        "tau_mean":  np.asarray(tau_mean,  dtype=float),
-        "fast_frac": np.asarray(fast_frac, dtype=float),
-        "universe":  universe,
-    })
+    df = pd.DataFrame(
+        {
+            "date": pd.to_datetime(dates).strftime("%Y-%m-%d"),
+            "ticker": list(tickers),
+            "score_raw": np.asarray(score_raw, dtype=float),
+            "score_adj": np.asarray(score_adj, dtype=float),
+            "ci_lower": np.asarray(ci_lower, dtype=float),
+            "ci_upper": np.asarray(ci_upper, dtype=float),
+            "tau_mean": np.asarray(tau_mean, dtype=float),
+            "fast_frac": np.asarray(fast_frac, dtype=float),
+            "universe": universe,
+        }
+    )
 
     # Compute cross-sectional rank per date (1 = best score_adj)
     df["rank"] = (
-        df.groupby("date")["score_adj"]
-        .rank(ascending=False, method="min")
-        .astype(int)
+        df.groupby("date")["score_adj"].rank(ascending=False, method="min").astype(int)
     )
 
     out_path = os.path.join(out_dir, "scores.csv")
