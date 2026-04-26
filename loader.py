@@ -23,14 +23,13 @@ FI_TICKERS = ["TLT", "VCIT", "LQD", "HYG", "VNQ", "GLD", "SLV"]
 EQUITY_TICKERS = [
     "SPY", "QQQ", "XLK", "XLF", "XLE", "XLV", "XLI",
     "XLY", "XLP", "XLU", "GDX", "XME", "IWM",
+    "IWF", "XSD", "XBI", "XLB", "XLRE",
 ]
-EXTENDED_TICKERS = ["IWF", "XSD", "XBI", "XLB", "XLRE"]
-ALL_TICKERS = FI_TICKERS + EQUITY_TICKERS + EXTENDED_TICKERS
+ALL_TICKERS = FI_TICKERS + EQUITY_TICKERS
 
 UNIVERSE_MAP = {
     "fi": FI_TICKERS,
     "equity": EQUITY_TICKERS,
-    "extended": EXTENDED_TICKERS,
     "combined": ALL_TICKERS,
 }
 
