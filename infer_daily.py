@@ -53,7 +53,7 @@ def run_daily_inference(universe: str = "combined", config_path: str = "ltc_conf
     if not ckpt_path.exists():
         raise FileNotFoundError(f"Checkpoint not found: {ckpt_path}. Run train.py first.")
 
-    ckpt = torch.load(ckpt_path, map_location=device)
+    ckpt = torch.load(ckpt_path, map_location=device, weights_only=True)
     model.load_state_dict(ckpt["state_dict"])
     log.info("Loaded checkpoint from epoch %d (val_sharpe=%.4f)", ckpt["epoch"], ckpt["val_sharpe"])
 
