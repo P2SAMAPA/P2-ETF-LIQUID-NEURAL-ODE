@@ -64,10 +64,17 @@ def run_backtest(
             all_ci_lower.append(ci_lower.cpu().numpy())
             all_ci_upper.append(ci_upper.cpu().numpy())
             all_actuals.append(y.cpu().numpy())
-            all_tau.append(regime["tau_mean"].cpu().numpy())
-            all_fast_frac.append(regime["fast_frac"].cpu().numpy())
-
+            # Ensure tau_mean and fast_frac are (batch_size,) arrays — broadcast scalar if needed
             n = x.size(0)
+            tau_val = np.atleast_1d(regime["tau_mean"].cpu().numpy())
+            ff_val = np.atleast_1d(regime["fast_frac"].cpu().numpy())
+            if tau_val.shape[0] == 1:
+                tau_val = np.repeat(tau_val, n)
+            if ff_val.shape[0] == 1:
+                ff_val = np.repeat(ff_val, n)
+            all_tau.append(tau_val)
+            all_fast_frac.append(ff_val)
+
             all_dates.extend(dates[sample_idx : sample_idx + n])
             sample_idx += n
 
@@ -76,8 +83,8 @@ def run_backtest(
     ci_lower_arr = np.vstack(all_ci_lower)
     ci_upper_arr = np.vstack(all_ci_upper)
     actuals_arr = np.vstack(all_actuals)  # (T, N_etf)
-    tau_arr = np.array(all_tau)  # (T,)
-    fast_frac_arr = np.array(all_fast_frac)  # (T,)
+    tau_arr = np.concatenate(all_tau)  # (T,)
+    fast_frac_arr = np.concatenate(all_fast_frac)  # (T,)
 
     # ── Long-short portfolio returns ──────────────────────────────────────────
     z_scores = np.apply_along_axis(zscore_rank, 1, scores_arr)
