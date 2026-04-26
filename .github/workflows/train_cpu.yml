@@ -151,6 +151,10 @@ jobs:
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: |
+          if [ ! -f checkpoints/best_val_sharpe.pt ]; then
+            echo "ERROR: No checkpoint found — training may have failed or early-stopped before first improvement."
+            exit 1
+          fi
           python evaluate.py \
             --universe ${{ matrix.universe }} \
             --config cpu_train_config.toml \
