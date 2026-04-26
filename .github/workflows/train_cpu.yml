@@ -175,7 +175,6 @@ jobs:
           python - << 'EOF'
           import os
           import json
-          import glob
           import pandas as pd
           from datasets import Dataset, load_dataset
           from huggingface_hub import login
@@ -186,25 +185,27 @@ jobs:
           UNIVERSE     = "${{ matrix.universe }}"
 
           # ── 1. Collect scores produced by evaluate.py ──────────────────────
-          # evaluate.py should write results/scores.csv with columns:
+          # evaluate.py must write results/scores.csv with columns:
           #   date, ticker, score_raw, score_adj, ci_lower, ci_upper,
           #   tau_mean, fast_frac, rank, universe
-          #
-          # Fall back gracefully if the file doesn't exist yet.
           scores_path = "results/scores.csv"
           if not os.path.exists(scores_path):
-              # Try any CSV in results/
-              csvs = glob.glob("results/*.csv")
-              if csvs:
-                  scores_path = csvs[0]
-                  print(f"scores.csv not found — using {scores_path}")
-              else:
-                  print("WARNING: No scores CSV found. Skipping HF dataset push.")
-                  exit(0)
+              print("WARNING: results/scores.csv not found — skipping HF dataset push.")
+              print("Ensure evaluate.py calls score_writer.write_scores() before exiting.")
+              exit(0)
 
           df_new = pd.read_csv(scores_path)
-          df_new["date"]     = pd.to_datetime(df_new["date"]).dt.strftime("%Y-%m-%d")
-          df_new["universe"] = UNIVERSE
+
+          # Validate required columns are present before proceeding
+          required_cols = {"date", "ticker", "score_adj"}
+          missing = required_cols - set(df_new.columns)
+          if missing:
+              print(f"ERROR: scores.csv is missing required columns: {missing}")
+              print(f"Found columns: {list(df_new.columns)}")
+              exit(1)
+          df_new["date"] = pd.to_datetime(df_new["date"]).dt.strftime("%Y-%m-%d")
+          if "universe" not in df_new.columns:
+              df_new["universe"] = UNIVERSE
 
           # ── 2. Merge with existing dataset (keep history) ──────────────────
           try:
