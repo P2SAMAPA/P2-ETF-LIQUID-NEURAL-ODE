@@ -1,7 +1,6 @@
 """tau_monitor.py — Monitor the τ distribution for regime detection.
 
-The distribution of per-neuron time constants is a natural soft regime
-label:
+The distribution of per-neuron time constants is a natural soft regime label:
     fast_frac  : fraction of neurons with τ < FAST_THRESHOLD (day-trader mode)
     slow_frac  : fraction of neurons with τ > SLOW_THRESHOLD (position-trade mode)
     mixed_frac : remainder
@@ -31,11 +30,19 @@ def compute_regime_labels(
     if tau_dist.dim() == 1:
         tau_dist = tau_dist.unsqueeze(0)
 
+    # Clamp to valid range before any computation — guards against any residual
+    # NaN/inf that slipped through the cell's clamp (e.g. during ODE path)
+    tau_dist = torch.clamp(tau_dist, min=1e-6, max=100.0)
+
     fast_frac = (tau_dist < fast_threshold).float().mean(dim=-1)
     slow_frac = (tau_dist > slow_threshold).float().mean(dim=-1)
     mixed_frac = 1.0 - fast_frac - slow_frac
+
     tau_mean = tau_dist.mean(dim=-1)
-    tau_log_mean = tau_dist.log().mean(dim=-1)
+
+    # FIX: tau_dist.log() produces -inf for very small tau values which
+    # poisons tau_log_mean. Clamp before log to keep it finite.
+    tau_log_mean = tau_dist.clamp(min=1e-6).log().mean(dim=-1)
 
     return {
         "fast_frac": fast_frac,
