@@ -43,67 +43,41 @@ jobs:
                       "PyWavelets>=1.6.0" pandas pyarrow scikit-learn scipy \
                       huggingface_hub datasets pydantic pydantic-settings rich
 
-      - name: Write CPU training config
+      - name: Patch ltc_config.toml for CPU runner
         run: |
-          cat > cpu_train_config.toml << 'EOF'
-          [model]
-          n_neurons       = 128         # 4x larger — enough capacity to learn cross-sectional patterns
-          n_sensory       = 48          # ~38% of n_neurons (NCP ratio)
-          n_inter         = 32          # inter-neuron layer
-          n_command       = 24          # command layer
-          tau_min         = 0.1
-          tau_max         = 10.0
-          sparsity        = 0.5         # slightly denser wiring for more capacity
-          use_closed_form = true        # closed-form avoids ODE stiffness on CPU
-          input_dim       = 0           # auto-derived at runtime
-          dropout         = 0.15        # slightly higher dropout for larger model
+          # ltc_config.toml in the repo already has the right model size, epochs,
+          # patience etc. We only need to patch the 3 settings that must differ on CPU:
+          #   use_closed_form = true   (dopri5 adjoint is too slow on CPU)
+          #   adjoint         = false  (same reason)
+          #   method          = "rk4"  (stable fixed-step solver; dopri5 needs GPU speed)
+          # Everything else (n_neurons=64, epochs=300, lr, batch_size …) comes from
+          # ltc_config.toml unchanged.
+          sed -i 's/^use_closed_form = false/use_closed_form = true/'  ltc_config.toml
+          sed -i 's/^adjoint = true/adjoint = false/'                   ltc_config.toml
+          sed -i 's/^method = "dopri5"/method = "rk4"/'                 ltc_config.toml
 
-          [training]
-          lr              = 3e-4        # higher LR for larger model — warmup handles stability
-          weight_decay    = 1e-4
-          epochs          = ${{ github.event.inputs.epochs }}
-          patience        = 30          # more patience — larger model needs more time to find signal
-          batch_size      = 64          # larger batches = more stable gradients on CPU
-          grad_clip       = 1.0
-          sharpe_lambda   = 0.3         # stronger Sharpe regularisation
-          warmup_epochs   = 10          # longer warmup for larger model
-          seed            = 42
+          # Allow caller to override epochs (default 300 from ltc_config.toml)
+          if [ -n "${{ github.event.inputs.epochs }}" ]; then
+            sed -i 's/^epochs = .*/epochs = ${{ github.event.inputs.epochs }}/' ltc_config.toml
+          fi
 
-          [ode]
-          method          = "rk4"
-          rtol            = 1e-3
-          atol            = 1e-4
-          adjoint         = false
-
-          [data]
-          window          = 63
-          hf_repo         = "P2SAMAPA/fi-etf-macro-signal-master-data"
-          parquet_file    = "master_data.parquet"
-          train_end       = "2019-12-31"
-          val_end         = "2022-12-31"
-
-          [scoring]
-          alpha_amp       = 0.3
-          mc_passes       = 30
-          ci_level        = 0.95
-
-          [output]
-          hf_results_repo = "P2SAMAPA/p2-etf-liquid-neural-ode-results"
-          checkpoint_dir  = "checkpoints"
-          results_dir     = "results"
-          EOF
+          echo "=== CPU-patched ltc_config.toml ==="
+          cat ltc_config.toml
 
       - name: Apply quick-test overrides
         if: ${{ github.event.inputs.quick_test == 'true' }}
         run: |
-          sed -i 's/^          epochs.*/          epochs = 5/'         cpu_train_config.toml
-          sed -i 's/^          n_neurons.*/          n_neurons = 16/'  cpu_train_config.toml
-          sed -i 's/^          n_sensory.*/          n_sensory = 8/'   cpu_train_config.toml
-          sed -i 's/^          n_inter.*/          n_inter = 6/'       cpu_train_config.toml
-          sed -i 's/^          n_command.*/          n_command = 4/'   cpu_train_config.toml
-          sed -i 's/^          batch_size.*/          batch_size = 8/' cpu_train_config.toml
-          # window kept at 63 — reducing it breaks the feature shape
-          echo "Quick test config active — 5 epochs, tiny model"
+        run: |
+          # Patch ltc_config.toml directly — match its unindented key format
+          sed -i 's/^epochs = .*/epochs = 5/'         ltc_config.toml
+          sed -i 's/^n_neurons = .*/n_neurons = 16/'  ltc_config.toml
+          sed -i 's/^n_sensory = .*/n_sensory = 8/'   ltc_config.toml
+          sed -i 's/^n_inter = .*/n_inter = 6/'       ltc_config.toml
+          sed -i 's/^n_command = .*/n_command = 4/'   ltc_config.toml
+          sed -i 's/^batch_size = .*/batch_size = 8/' ltc_config.toml
+          # window stays at 63 — changing it breaks the feature shape
+          echo '=== Quick test config (5 epochs, tiny model) ==='
+          cat ltc_config.toml
 
       - name: Download master data from HuggingFace
         env:
@@ -130,7 +104,7 @@ jobs:
           mkdir -p checkpoints results
           python train.py \
             --universe ${{ matrix.universe }} \
-            --config cpu_train_config.toml
+            --config ltc_config.toml
 
       - name: Print training summary — ${{ matrix.universe }}
         run: |
@@ -157,7 +131,7 @@ jobs:
           fi
           python evaluate.py \
             --universe ${{ matrix.universe }} \
-            --config cpu_train_config.toml \
+            --config ltc_config.toml \
             --checkpoint checkpoints/best_val_sharpe.pt
 
       - name: Print metrics — ${{ matrix.universe }}
@@ -230,7 +204,7 @@ jobs:
             results/metrics.json
             results/tau_log.json
             results/scores.csv
-            cpu_train_config.toml
+            ltc_config.toml
           retention-days: 90
 
       - name: Push checkpoint to HuggingFace Model — ${{ matrix.universe }}
@@ -254,8 +228,8 @@ jobs:
               repo_id=repo, repo_type="model", token=token,
           )
           api.upload_file(
-              path_or_fileobj="cpu_train_config.toml",
-              path_in_repo=f"checkpoints/{universe}/cpu_train_config.toml",
+              path_or_fileobj="ltc_config.toml",
+              path_in_repo=f"checkpoints/{universe}/ltc_config.toml",
               repo_id=repo, repo_type="model", token=token,
           )
           print(f"Checkpoint pushed to {repo}/checkpoints/{universe}/")
