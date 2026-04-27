@@ -67,7 +67,7 @@ def train(
     # Save initial weights so we can roll back if NaN occurs
     best_state = {k: v.clone() for k, v in model.state_dict().items()}
     nan_streak = 0
-    MAX_NAN_STREAK = 3  # abort training if NaN persists this many epochs
+    max_nan_streak = 3  # abort training if NaN persists this many epochs
 
     for epoch in range(1, cfg.training.epochs + 1):
 
@@ -148,10 +148,10 @@ def train(
                 avg_loss,
                 val_sharpe,
                 nan_streak,
-                MAX_NAN_STREAK,
+                max_nan_streak,
             )
-            if nan_streak >= MAX_NAN_STREAK:
-                log.error("NaN persisted for %d epochs — aborting training.", MAX_NAN_STREAK)
+            if nan_streak >= max_nan_streak:
+                log.error("NaN persisted for %d epochs — aborting training.", max_nan_streak)
                 break
             # Use 0.0 as sentinel so early stopping / checkpointer skip this epoch
             val_sharpe = 0.0
