@@ -89,8 +89,13 @@ def load_results() -> tuple[pd.DataFrame, bool]:
         from datasets import load_dataset
 
         hf_token = os.environ.get("HF_TOKEN")
-        # FIX: No pinned revision/commit hash — always loads latest main branch
-        ds = load_dataset(HF_RESULTS_REPO, split="train", token=hf_token if hf_token else None)
+        # Always re-download — prevents stale Streamlit cache serving old empty dataset
+        ds = load_dataset(
+            HF_RESULTS_REPO,
+            split="train",
+            token=hf_token if hf_token else None,
+            download_mode="force_redownload",
+        )
         df = ds.to_pandas()
 
         if df.empty:
