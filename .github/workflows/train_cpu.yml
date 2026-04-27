@@ -45,24 +45,56 @@ jobs:
 
       - name: Patch ltc_config.toml for CPU runner
         run: |
-          # ltc_config.toml in the repo already has the right model size, epochs,
-          # patience etc. We only need to patch the 3 settings that must differ on CPU:
-          #   use_closed_form = true   (dopri5 adjoint is too slow on CPU)
-          #   adjoint         = false  (same reason)
-          #   method          = "rk4"  (stable fixed-step solver; dopri5 needs GPU speed)
-          # Everything else (n_neurons=64, epochs=300, lr, batch_size …) comes from
-          # ltc_config.toml unchanged.
-          sed -i 's/^use_closed_form = false/use_closed_form = true/'  ltc_config.toml
-          sed -i 's/^adjoint = true/adjoint = false/'                   ltc_config.toml
-          sed -i 's/^method = "dopri5"/method = "rk4"/'                 ltc_config.toml
+          # Patch only the settings that must differ on CPU.
+          # Use Python for reliable in-place editing regardless of whitespace.
+          python3 - << 'PYEOF'
+          import re
 
-          # Allow caller to override epochs (default 300 from ltc_config.toml)
-          if [ -n "${{ github.event.inputs.epochs }}" ]; then
-            sed -i 's/^epochs = .*/epochs = ${{ github.event.inputs.epochs }}/' ltc_config.toml
-          fi
+          with open("ltc_config.toml", "r") as f:
+              cfg = f.read()
 
-          echo "=== CPU-patched ltc_config.toml ==="
-          cat ltc_config.toml
+          patches = {
+              # Closed-form avoids ODE solver entirely on CPU — 10x faster
+              r"use_closed_form\s*=\s*\S+": "use_closed_form = true",
+              # Adjoint backprop too slow on CPU
+              r"adjoint\s*=\s*\S+": "adjoint = false",
+              # rk4 stable fixed-step; dopri5 needs GPU-level throughput
+              r'method\s*=\s*"[^"]*"': 'method = "rk4"',
+              # Scale up model to fill 6 hours of CPU time
+              r"n_neurons\s*=\s*\d+": "n_neurons = 256",
+              r"n_sensory\s*=\s*\d+": "n_sensory = 96",
+              r"n_inter\s*=\s*\d+": "n_inter = 64",
+              r"n_command\s*=\s*\d+": "n_command = 48",
+              r"sparsity\s*=\s*[\d.]+": "sparsity = 0.4",
+              r"dropout\s*=\s*[\d.]+": "dropout = 0.2",
+              # Training — larger model needs lower LR and more warmup
+              r"lr\s*=\s*[\de\-\.]+": "lr = 5e-4",
+              r"batch_size\s*=\s*\d+": "batch_size = 128",
+              r"warmup_epochs\s*=\s*\d+": "warmup_epochs = 15",
+              r"patience\s*=\s*\d+": "patience = 40",
+              r"grad_clip\s*=\s*[\d.]+": "grad_clip = 0.5",
+              r"sharpe_lambda\s*=\s*[\d.]+": "sharpe_lambda = 0.2",
+              # Window — longer context
+              r"window\s*=\s*\d+": "window = 126",
+              # MC passes — more uncertainty estimates
+              r"mc_passes\s*=\s*\d+": "mc_passes = 50",
+          }
+
+          for pattern, replacement in patches.items():
+              cfg = re.sub(pattern, replacement, cfg)
+
+          # Override epochs from workflow input if provided
+          import os
+          epochs_input = "${{ github.event.inputs.epochs }}".strip()
+          if epochs_input:
+              cfg = re.sub(r"epochs\s*=\s*\d+", f"epochs = {epochs_input}", cfg)
+
+          with open("ltc_config.toml", "w") as f:
+              f.write(cfg)
+
+          print("=== CPU-patched ltc_config.toml ===")
+          print(cfg)
+          PYEOF
 
       - name: Apply quick-test overrides
         if: ${{ github.event.inputs.quick_test == 'true' }}
