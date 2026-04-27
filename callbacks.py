@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import math
 from pathlib import Path
 
 import torch
@@ -16,7 +17,10 @@ log = get_logger(__name__)
 class EarlyStopping:
     """Stop training when val_sharpe has not improved for `patience` epochs."""
 
-    def __init__(self, patience: int = 25, min_delta: float = 1e-4) -> None:
+    def __init__(self, patience: int = 25, min_delta: float = 1e-3) -> None:
+        # FIX: min_delta raised from 1e-4 to 1e-3 — Sharpe oscillates at the
+        # noise level early in training; 1e-4 caused early stopping after ~26
+        # epochs before the model had a chance to find real signal.
         self.patience = patience
         self.min_delta = min_delta
         self.best_score = -float("inf")
@@ -24,6 +28,10 @@ class EarlyStopping:
         self.should_stop = False
 
     def __call__(self, val_sharpe: float) -> bool:
+        # Treat NaN/inf as no improvement
+        if not math.isfinite(val_sharpe):
+            val_sharpe = 0.0
+
         if val_sharpe > self.best_score + self.min_delta:
             self.best_score = val_sharpe
             self.counter = 0
@@ -52,6 +60,10 @@ class ModelCheckpoint:
         Returns:
             True if a new checkpoint was saved.
         """
+        # FIX: don't save NaN checkpoints — they poison evaluation
+        if not math.isfinite(val_sharpe):
+            return False
+
         if val_sharpe > self.best_score or epoch == 1:
             self.best_score = max(val_sharpe, self.best_score)
             torch.save(
@@ -77,12 +89,16 @@ class TauDistributionLogger:
         self.records: list[dict] = []
 
     def log(self, epoch: int, tau_mean: float, fast_frac: float, slow_frac: float) -> None:
+        # FIX: sanitise values before logging — NaN/inf break JSON serialisation
+        def _safe(v: float) -> float:
+            return float(v) if math.isfinite(v) else 0.0
+
         self.records.append(
             {
                 "epoch": epoch,
-                "tau_mean": tau_mean,
-                "fast_frac": fast_frac,
-                "slow_frac": slow_frac,
+                "tau_mean": _safe(tau_mean),
+                "fast_frac": _safe(fast_frac),
+                "slow_frac": _safe(slow_frac),
             }
         )
 
