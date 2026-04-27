@@ -32,9 +32,21 @@ class LTCDataset(Dataset):
         window: int = 63,
     ) -> None:
         self.features = features.values.astype(np.float32)
-        self.returns = returns.values.astype(np.float32)
-        self.delta_t = delta_t.values.astype(np.float32)
         self.window = window
+
+        # FIX: Fill NaN returns with 0.0 at construction time, not in the loss.
+        # This ensures the model sees consistent targets and NaN patterns in the
+        # data don't leak into the loss function as a spurious signal.
+        returns_filled = returns.fillna(0.0)
+        self.returns = returns_filled.values.astype(np.float32)
+
+        # FIX: Also clip extreme returns to [-0.5, +0.5] (50% daily move).
+        # Raw log-returns occasionally contain data errors (splits, suspensions)
+        # that produce 10x+ values which dominate the loss and destabilise training.
+        self.returns = np.clip(self.returns, -0.5, 0.5)
+
+        self.delta_t = delta_t.values.astype(np.float32)
+
         # Align: target is the day *after* the window ends
         self.n_samples = len(features) - window
 
