@@ -26,8 +26,8 @@ st.set_page_config(
 # ── Constants ─────────────────────────────────────────────────────────────────
 HF_RESULTS_REPO = "P2SAMAPA/p2-etf-liquid-neural-ode-results"
 HF_DATA_REPO = "P2SAMAPA/fi-etf-macro-signal-master-data"
-FAST_THRESHOLD = 0.3
-SLOW_THRESHOLD = 5.0
+FAST_THRESHOLD = 2.0  # matches tau_monitor.py — sigmoid tau range (0.1, 10.0)
+SLOW_THRESHOLD = 7.0
 
 FI_TICKERS = ["TLT", "VCIT", "LQD", "HYG", "VNQ", "GLD", "SLV"]
 EQ_TICKERS = [
