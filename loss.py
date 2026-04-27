@@ -20,6 +20,7 @@ class SharpeLoss(nn.Module):
         super().__init__()
         self.lam = lam
         self.eps = eps
+        self._logged = False  # print diagnostics once per training run
 
     def forward(
         self,
@@ -28,10 +29,21 @@ class SharpeLoss(nn.Module):
     ) -> tuple[torch.Tensor, dict[str, float]]:
         """Compute combined loss."""
 
-        # ── NaN scrub ────────────────────────────────────────────────────────
-        # actual (y) may contain NaN for missing return dates in the dataset.
-        # Replace NaN with 0 (neutral return) so the loss stays finite.
-        # Also scrub pred in case of any upstream instability.
+        # ── One-time diagnostic on first forward call ─────────────────────────
+        if not self._logged:
+            self._logged = True
+            print(
+                f"[SharpeLoss] pred: shape={tuple(pred.shape)} "
+                f"min={pred.min().item():.4f} max={pred.max().item():.4f} "
+                f"nan={pred.isnan().sum().item()} inf={pred.isinf().sum().item()}"
+            )
+            print(
+                f"[SharpeLoss] actual: shape={tuple(actual.shape)} "
+                f"min={actual.min().item():.4f} max={actual.max().item():.4f} "
+                f"nan={actual.isnan().sum().item()} inf={actual.isinf().sum().item()}"
+            )
+
+        # ── NaN scrub ─────────────────────────────────────────────────────────
         pred = torch.nan_to_num(pred, nan=0.0, posinf=1.0, neginf=-1.0)
         actual = torch.nan_to_num(actual, nan=0.0, posinf=0.1, neginf=-0.1)
 
@@ -54,10 +66,16 @@ class SharpeLoss(nn.Module):
 
         loss = sharpe_loss + self.lam * ic_loss
 
-        # ── Final NaN guard ───────────────────────────────────────────────────
-        # If loss is still non-finite after scrubbing, fall back to pure IC loss
-        # (which is more stable than Sharpe). This preserves gradient flow.
+        # ── Diagnostics if loss still non-finite ──────────────────────────────
         if not torch.isfinite(loss):
+            print(
+                f"[SharpeLoss] NON-FINITE: sharpe={sharpe_loss.item():.4f} "
+                f"ic={ic.item():.4f} mu={mu.item():.6f} sigma={sigma.item():.6f} "
+                f"port_returns nan={port_returns.isnan().sum().item()} "
+                f"actual nan={actual.isnan().sum().item()} "
+                f"actual std={actual.std().item():.6f}"
+            )
+            # Fall back to pure IC loss — has gradient, avoids sigma=0 division
             loss = ic_loss.clamp(0.0, 2.0)
 
         info = {
