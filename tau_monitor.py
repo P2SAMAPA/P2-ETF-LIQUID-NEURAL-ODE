@@ -12,8 +12,12 @@ from __future__ import annotations
 
 import torch
 
-FAST_THRESHOLD = 0.3  # days — τ below this → "fast" neuron
-SLOW_THRESHOLD = 5.0  # days — τ above this → "slow" neuron
+# FIX: thresholds raised to match sigmoid-bounded tau range (0.1, 10.0).
+# With sigmoid activation, tau centres around 5.05d so almost no neurons
+# fall below 0.3d (old threshold). New thresholds split the (0.1,10.0)
+# range into meaningful thirds: fast < 2d, slow > 7d, mixed in between.
+FAST_THRESHOLD = 2.0  # days — τ below this → "fast" neuron
+SLOW_THRESHOLD = 7.0  # days — τ above this → "slow" neuron
 
 
 def compute_regime_labels(
