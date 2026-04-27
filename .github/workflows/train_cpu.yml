@@ -181,9 +181,18 @@ jobs:
 
           # Use the very last window as today's input
           last_feat = features.iloc[-cfg.data.window:]
-          x   = torch.tensor(last_feat.values, dtype=torch.float32).unsqueeze(0)  # (1, W, F)
-          # delta_t for the last window — use median of recent gaps
-          dt  = torch.tensor([1.0])  # 1 trading day forward
+          x = torch.tensor(last_feat.values, dtype=torch.float32).unsqueeze(0)  # (1, W, F)
+
+          # delta_t must be shape (B, T) = (1, window) — one gap per timestep.
+          # Use actual calendar gaps from the feature index where available,
+          # defaulting to 1.0 trading day (the model normalises internally).
+          feat_index = features.index[-cfg.data.window:]
+          if len(feat_index) > 1:
+              gaps = [(feat_index[i] - feat_index[i-1]).days for i in range(1, len(feat_index))]
+              gaps = [gaps[0]] + gaps  # repeat first gap to match window length
+          else:
+              gaps = [1.0] * cfg.data.window
+          dt = torch.tensor([gaps], dtype=torch.float32)  # (1, W)
 
           # Load model
           n_etf     = len(returns_df.columns)
@@ -203,15 +212,12 @@ jobs:
           from torch.utils.data import DataLoader, TensorDataset
           # Build a minimal single-step loader
           # We need (x, dt, y) — use zeros for y since we don't know future returns
-          dummy_y = torch.zeros(1, n_etf)
-          dummy_dt = torch.ones(1)
-
           with torch.no_grad():
-              unc = uncertainty_pass(model, x, dummy_dt, n_passes=cfg.scoring.mc_passes)
+              unc = uncertainty_pass(model, x, dt, n_passes=cfg.scoring.mc_passes)
               scores_raw = unc["mean"].squeeze(0).cpu().numpy()
               ci_lo = unc["ci_lower"].squeeze(0).cpu().numpy()
               ci_hi = unc["ci_upper"].squeeze(0).cpu().numpy()
-              _, tau_dist = model(x, dummy_dt)
+              _, tau_dist = model(x, dt)
               regime = compute_regime_labels(tau_dist)
               scores_adj = apply_regime_adjustment(
                   unc["mean"], regime["fast_frac"], cfg.scoring.alpha_amp
