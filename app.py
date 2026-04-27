@@ -274,58 +274,50 @@ with tab1:
         import plotly.express as px
         import plotly.graph_objects as go
 
-        colours = [UNIVERSE_COLOURS.get(t, "#888") for t in df_today["ticker"]]
+        # Sort by score descending so best ETFs are on the left
+        df_plot = df_today.sort_values("score_adj", ascending=False).reset_index(drop=True)
+        colours_sorted = [UNIVERSE_COLOURS.get(t, "#888") for t in df_plot["ticker"]]
 
         fig = go.Figure()
         fig.add_trace(
             go.Bar(
-                x=df_today["ticker"],
-                y=df_today["score_adj"],
-                marker_color=colours,
-                text=df_today["rank"].apply(lambda r: f"#{r}"),
+                x=df_plot["ticker"],
+                y=df_plot["score_adj"],
+                marker_color=colours_sorted,
+                marker_line_width=0,
+                text=df_plot.apply(lambda r: f"#{int(r['rank'])}  {r['score_adj']:.2f}", axis=1),
                 textposition="outside",
+                textfont=dict(size=10),
                 name="Score (z)",
             )
         )
-        if show_ci and "ci_lower" in df_today.columns:
-            fig.add_trace(
-                go.Scatter(
-                    x=df_today["ticker"],
-                    y=df_today["ci_upper"],
-                    mode="markers",
-                    marker=dict(
-                        symbol="line-ew",
-                        size=10,
-                        color="rgba(100,100,100,0.4)",
-                        line=dict(width=2, color="rgba(100,100,100,0.4)"),
-                    ),
-                    name="CI Upper",
+        if show_ci and "ci_lower" in df_plot.columns:
+            fig.update_traces(
+                error_y=dict(
+                    type="data",
+                    symmetric=False,
+                    array=(df_plot["ci_upper"] - df_plot["score_adj"]).clip(lower=0).tolist(),
+                    arrayminus=(df_plot["score_adj"] - df_plot["ci_lower"]).clip(lower=0).tolist(),
+                    color="rgba(80,80,80,0.45)",
+                    thickness=1.5,
+                    width=4,
                 )
             )
-            fig.add_trace(
-                go.Scatter(
-                    x=df_today["ticker"],
-                    y=df_today["ci_lower"],
-                    mode="markers",
-                    marker=dict(
-                        symbol="line-ew",
-                        size=10,
-                        color="rgba(100,100,100,0.4)",
-                        line=dict(width=2, color="rgba(100,100,100,0.4)"),
-                    ),
-                    name="CI Lower",
-                )
-            )
-        fig.add_hline(y=0, line_dash="dot", line_color="gray", line_width=1)
+        fig.add_hline(y=0, line_dash="dot", line_color="rgba(128,128,128,0.5)", line_width=1)
         fig.update_layout(
-            title=f"Cross-Sectional Z-Score Rankings — {latest_date.date()}",
-            xaxis_title="ETF",
-            yaxis_title="Score (z-score)",
+            title=dict(
+                text=f"ETF Rankings — {latest_date.date()} · sorted best → worst",
+                font=dict(size=14),
+            ),
+            xaxis=dict(title="ETF", tickangle=-35, tickfont=dict(size=11)),
+            yaxis=dict(title="Score (z-score)", zeroline=False),
             showlegend=False,
-            height=420,
+            height=540,
+            margin=dict(t=70, b=90, l=60, r=20),
             plot_bgcolor="rgba(0,0,0,0)",
             paper_bgcolor="rgba(0,0,0,0)",
             font=dict(size=12),
+            bargap=0.3,
         )
         st.plotly_chart(fig, use_container_width=True)
 
