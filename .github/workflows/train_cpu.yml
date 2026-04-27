@@ -67,7 +67,6 @@ jobs:
       - name: Apply quick-test overrides
         if: ${{ github.event.inputs.quick_test == 'true' }}
         run: |
-        run: |
           # Patch ltc_config.toml directly — match its unindented key format
           sed -i 's/^epochs = .*/epochs = 5/'         ltc_config.toml
           sed -i 's/^n_neurons = .*/n_neurons = 16/'  ltc_config.toml
