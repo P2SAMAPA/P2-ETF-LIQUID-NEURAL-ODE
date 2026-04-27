@@ -2,7 +2,7 @@
 
 Implements:
     dh/dt = −[1/τ(x,h)] · h  +  f(x, h, t) · A(x)
-    τ(x,h) = τ_min + softplus(W_τ · [x ‖ h] + b_τ)
+    τ(x,h) = τ_min + sigmoid(W_τ · [x ‖ h] + b_τ) · (τ_max − τ_min)
     A(x)   = σ(W_A · x + b_A)
 
 Solved with torchdiffeq dopri5 using the adjoint method for
@@ -41,10 +41,12 @@ class LTCODEFunc(nn.Module):
 
         concat_dim = input_dim + hidden_dim
 
-        # τ network: [x ‖ h] → τ (strictly positive via softplus)
+        # FIX: Sigmoid instead of Softplus — bounds tau strictly in
+        # (tau_min, tau_max). Softplus outputs [0, ∞) making 1/tau → 0
+        # and dhdt unbounded, causing NaN within a few ODE steps.
         self.tau_net = nn.Sequential(
             nn.Linear(concat_dim, hidden_dim),
-            nn.Softplus(),
+            nn.Sigmoid(),  # output in (0, 1) → tau in (tau_min, tau_max)
         )
 
         # Input gate A: x → (0,1) via sigmoid
@@ -70,6 +72,7 @@ class LTCODEFunc(nn.Module):
         x = self._x
         xh = torch.cat([x, h], dim=-1)
 
+        # tau strictly in (tau_min, tau_max) — 1/tau is always finite
         tau = self.tau_min + self.tau_net(xh) * (self.tau_max - self.tau_min)
         gate_out = self.gate_net(x)
         f = self.f_net(xh)
@@ -82,14 +85,14 @@ class LTCCell(nn.Module):
     """LTC cell that integrates over a single time step [0, Δt].
 
     Args:
-        input_dim:  Feature dimension.
-        hidden_dim: Number of LTC neurons.
-        tau_min:    Minimum time constant (days).
-        tau_max:    Maximum time constant (days).
+        input_dim:   Feature dimension.
+        hidden_dim:  Number of LTC neurons.
+        tau_min:     Minimum time constant (days).
+        tau_max:     Maximum time constant (days).
         use_adjoint: Use adjoint sensitivity for backprop (memory-efficient).
-        ode_method: ODE solver method (dopri5 recommended).
-        rtol:       Relative tolerance.
-        atol:       Absolute tolerance.
+        ode_method:  ODE solver method (dopri5 recommended).
+        rtol:        Relative tolerance.
+        atol:        Absolute tolerance.
     """
 
     def __init__(
@@ -126,9 +129,11 @@ class LTCCell(nn.Module):
         """
         self.ode_func.set_input(x)
 
-        # Build per-sample time spans — dopri5 needs a common t tensor;
-        # we normalise by mean delta_t and scale inside ODE
-        t_span = torch.stack([torch.zeros_like(delta_t[0]), delta_t.mean()])
+        # FIX: use median delta_t (more robust than mean to outlier gaps
+        # caused by holidays/weekends which can be 3+ days and inflate
+        # the integration endpoint, causing ODE step-size explosion).
+        dt_val = delta_t.median().clamp(min=1e-3, max=5.0)
+        t_span = torch.tensor([0.0, dt_val.item()], device=x.device)
 
         solver = odeint_adjoint if self.use_adjoint else odeint
 
@@ -142,6 +147,9 @@ class LTCCell(nn.Module):
         )  # shape: (2, batch, hidden_dim)
 
         h_next = h_traj[-1]
+
+        # Clamp hidden state to prevent explosion propagating across steps
+        h_next = torch.clamp(h_next, min=-10.0, max=10.0)
 
         # Extract τ distribution for regime monitoring
         xh = torch.cat([x, h_next], dim=-1)
