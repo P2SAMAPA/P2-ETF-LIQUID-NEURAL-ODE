@@ -141,6 +141,111 @@ jobs:
           fi
 
 
+      # ── Run daily inference to generate TODAY's scores ──────────────────────
+      - name: Daily inference — ${{ matrix.universe }}
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          python - << 'EOF'
+          import os
+          import sys
+          from datetime import date
+          import pandas as pd
+          import numpy as np
+          import torch
+
+          from config import load_config
+          from loader import get_universe_data, load_master_data
+          from preprocessor import preprocess
+          from ltc_model import LTCModel
+          from uncertainty import uncertainty_pass
+          from regime_score import apply_regime_adjustment
+          from tau_monitor import compute_regime_labels
+          from ranker import build_daily_ranking
+          from publisher import push_results
+
+          UNIVERSE = "${{ matrix.universe }}"
+          CKPT     = "checkpoints/best_val_sharpe.pt"
+
+          if not os.path.exists(CKPT):
+              print(f"No checkpoint found — skipping daily inference for {UNIVERSE}")
+              sys.exit(0)
+
+          cfg    = load_config("ltc_config.toml")
+          device = torch.device("cpu")
+
+          # Load latest data including today
+          df_master = load_master_data(cfg.data.hf_repo, cfg.data.parquet_file)
+          returns_df, macro_df = get_universe_data(df_master, UNIVERSE)
+          features, delta_t    = preprocess(returns_df, macro_df, cfg.data.window)
+
+          # Use the very last window as today's input
+          last_feat = features.iloc[-cfg.data.window:]
+          x   = torch.tensor(last_feat.values, dtype=torch.float32).unsqueeze(0)  # (1, W, F)
+          # delta_t for the last window — use median of recent gaps
+          dt  = torch.tensor([1.0])  # 1 trading day forward
+
+          # Load model
+          n_etf     = len(returns_df.columns)
+          input_dim = features.shape[1]
+          m = cfg.model
+          model = LTCModel(
+              input_dim=input_dim, hidden_dim=m.n_neurons, n_etf=n_etf,
+              tau_min=m.tau_min, tau_max=m.tau_max, dropout=m.dropout,
+              use_closed_form=m.use_closed_form, use_adjoint=cfg.ode.adjoint,
+              ode_method=cfg.ode.method, rtol=cfg.ode.rtol, atol=cfg.ode.atol,
+          )
+          ckpt = torch.load(CKPT, map_location=device, weights_only=True)
+          model.load_state_dict(ckpt["state_dict"])
+          model.eval()
+
+          # MC dropout inference
+          from torch.utils.data import DataLoader, TensorDataset
+          # Build a minimal single-step loader
+          # We need (x, dt, y) — use zeros for y since we don't know future returns
+          dummy_y = torch.zeros(1, n_etf)
+          dummy_dt = torch.ones(1)
+
+          with torch.no_grad():
+              unc = uncertainty_pass(model, x, dummy_dt, n_passes=cfg.scoring.mc_passes)
+              scores_raw = unc["mean"].squeeze(0).cpu().numpy()
+              ci_lo = unc["ci_lower"].squeeze(0).cpu().numpy()
+              ci_hi = unc["ci_upper"].squeeze(0).cpu().numpy()
+              _, tau_dist = model(x, dummy_dt)
+              regime = compute_regime_labels(tau_dist)
+              scores_adj = apply_regime_adjustment(
+                  unc["mean"], regime["fast_frac"], cfg.scoring.alpha_amp
+              ).squeeze(0).cpu().numpy()
+
+          tau_mean  = float(regime["tau_mean"].mean().item())
+          fast_frac = float(regime["fast_frac"].mean().item())
+
+          # Use next trading date (today if market open, else next business day)
+          today = pd.Timestamp.today().normalize()
+          if today.weekday() >= 5:  # weekend
+              today = today + pd.offsets.BDay(1)
+
+          tickers = list(returns_df.columns)
+          daily_df = build_daily_ranking(
+              scores=scores_adj,
+              tickers=tickers,
+              date=today,
+              ci_lower=ci_lo,
+              ci_upper=ci_hi,
+              tau_mean=tau_mean,
+              fast_frac=fast_frac,
+              universe=UNIVERSE,
+          )
+
+          print(f"Daily inference complete — {today.date()} | {UNIVERSE} | {len(daily_df)} ETFs")
+          print(daily_df[["ticker", "rank", "score_adj", "tau_mean"]].head(10).to_string())
+
+          # Push today's scores to HF (deduplication in publisher handles re-runs)
+          hf_token = os.environ.get("HF_TOKEN")
+          push_results(daily_df, token=hf_token)
+          print(f"✅ Today's scores pushed → {today.date()} | {UNIVERSE}")
+          EOF
+
       - name: List results directory — ${{ matrix.universe }}
         if: always()
         run: |
