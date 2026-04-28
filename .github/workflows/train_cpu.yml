@@ -54,29 +54,29 @@ jobs:
               cfg = f.read()
 
           patches = {
-              # Closed-form avoids ODE solver entirely on CPU — 10x faster
+              # CPU-specific: avoid ODE solver
               r"use_closed_form\s*=\s*\S+": "use_closed_form = true",
-              # Adjoint backprop too slow on CPU
               r"adjoint\s*=\s*\S+": "adjoint = false",
-              # rk4 stable fixed-step; dopri5 needs GPU-level throughput
               r'method\s*=\s*"[^"]*"': 'method = "rk4"',
-              # Scale up model to fill 6 hours of CPU time
+              # Model size — 256 neurons fills ~15 mins per universe on 4-vCPU runner
               r"n_neurons\s*=\s*\d+": "n_neurons = 256",
               r"n_sensory\s*=\s*\d+": "n_sensory = 96",
               r"n_inter\s*=\s*\d+": "n_inter = 64",
               r"n_command\s*=\s*\d+": "n_command = 48",
-              r"sparsity\s*=\s*[\d.]+": "sparsity = 0.4",
-              r"dropout\s*=\s*[\d.]+": "dropout = 0.2",
-              # Training — larger model needs lower LR and more warmup
+              r"sparsity\s*=\s*[\d.]+": "sparsity = 0.5",
+              # Higher dropout combats overfitting (val_sharpe >> train_sharpe observed)
+              r"dropout\s*=\s*[\d.]+": "dropout = 0.25",
+              # Conservative LR with long warmup for stability
               r"lr\s*=\s*[\de\-\.]+": "lr = 5e-4",
-              r"batch_size\s*=\s*\d+": "batch_size = 128",
-              r"warmup_epochs\s*=\s*\d+": "warmup_epochs = 15",
-              r"patience\s*=\s*\d+": "patience = 40",
+              r"weight_decay\s*=\s*[\de\-\.]+": "weight_decay = 5e-4",
+              r"batch_size\s*=\s*\d+": "batch_size = 64",
+              r"warmup_epochs\s*=\s*\d+": "warmup_epochs = 20",
+              r"patience\s*=\s*\d+": "patience = 80",
               r"grad_clip\s*=\s*[\d.]+": "grad_clip = 0.5",
-              r"sharpe_lambda\s*=\s*[\d.]+": "sharpe_lambda = 0.2",
-              # Window — longer context
+              # Higher IC weight to learn genuine cross-sectional signal
+              r"sharpe_lambda\s*=\s*[\d.]+": "sharpe_lambda = 0.4",
+              # Longer window = richer temporal context
               r"window\s*=\s*\d+": "window = 126",
-              # MC passes — more uncertainty estimates
               r"mc_passes\s*=\s*\d+": "mc_passes = 50",
           }
 
