@@ -64,6 +64,10 @@ def push_results(
             df_existing = df_existing[mask.values]
 
         combined = pd.concat([df_existing, df], ignore_index=True)
+        # Final dedup — parallel universe jobs race and stack rows without this
+        dedup_final = [c for c in ["date", "ticker", "universe"] if c in combined.columns]
+        if dedup_final:
+            combined = combined.drop_duplicates(subset=dedup_final, keep="last")
         log.info(
             "Merged: %d existing + %d new = %d total rows", len(df_existing), len(df), len(combined)
         )
