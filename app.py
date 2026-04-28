@@ -103,6 +103,12 @@ def load_results() -> tuple[pd.DataFrame, bool]:
 
         df["date"] = pd.to_datetime(df["date"])
 
+        # Deduplicate — parallel CI jobs can push duplicate (date, ticker, universe) rows.
+        # Keep the last occurrence (most recent push) for each key.
+        dedup_cols = [c for c in ["date", "ticker", "universe"] if c in df.columns]
+        if dedup_cols:
+            df = df.drop_duplicates(subset=dedup_cols, keep="last")
+
         # Ensure universe column exists
         if "universe" not in df.columns:
             df["universe"] = df["ticker"].apply(lambda t: "fi" if t in FI_TICKERS else "equity")
