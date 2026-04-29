@@ -84,36 +84,60 @@ UNIVERSE_COLOURS = {
 
 @st.cache_data(ttl=3600, show_spinner="Loading results from HuggingFace…")
 def load_results() -> tuple[pd.DataFrame, bool]:
-    """Load scores from HF Dataset. Returns (df, is_demo). Falls back to synthetic demo data."""
+    """Load scores via direct parquet URL — no datasets/pyarrow dependency.
+
+    Uses huggingface_hub to list files then reads parquet with pandas directly.
+    This avoids the datasets library entirely, fixing Python 3.14 / PyArrow
+    build failures on Streamlit Cloud where cmake is unavailable.
+    """
     try:
-        from datasets import load_dataset
+        import io
+        import requests
+        from huggingface_hub import HfApi
 
         hf_token = os.environ.get("HF_TOKEN")
-        # Always re-download — prevents stale Streamlit cache serving old empty dataset
-        ds = load_dataset(
-            HF_RESULTS_REPO,
-            split="train",
-            token=hf_token if hf_token else None,
-            download_mode="force_redownload",
+        api = HfApi()
+
+        # List all parquet files in the dataset repo
+        files = list(
+            api.list_repo_files(
+                HF_RESULTS_REPO,
+                repo_type="dataset",
+                token=hf_token if hf_token else None,
+            )
         )
-        df = ds.to_pandas()
+        parquet_files = [f for f in files if f.endswith(".parquet")]
+
+        if not parquet_files:
+            raise ValueError("No parquet files found in HF dataset repo.")
+
+        # Download and concatenate all parquet shards directly
+        headers = {"Authorization": f"Bearer {hf_token}"} if hf_token else {}
+        dfs = []
+        for fname in parquet_files:
+            url = f"https://huggingface.co/datasets/{HF_RESULTS_REPO}/resolve/main/{fname}"
+            resp = requests.get(url, headers=headers, timeout=60)
+            resp.raise_for_status()
+            dfs.append(pd.read_parquet(io.BytesIO(resp.content)))
+
+        df = pd.concat(dfs, ignore_index=True)
 
         if df.empty:
             raise ValueError("Dataset loaded but contains no rows.")
 
         df["date"] = pd.to_datetime(df["date"])
 
-        # Deduplicate — parallel CI jobs can push duplicate (date, ticker, universe) rows.
-        # Keep the last occurrence (most recent push) for each key.
-        dedup_cols = [c for c in ["date", "ticker", "universe"] if c in df.columns]
-        if dedup_cols:
-            df = df.drop_duplicates(subset=dedup_cols, keep="last")
-
         # Ensure universe column exists
         if "universe" not in df.columns:
             df["universe"] = df["ticker"].apply(lambda t: "fi" if t in FI_TICKERS else "equity")
 
+        # Deduplicate — parallel CI jobs can push duplicate (date, ticker, universe) rows
+        dedup_cols = [c for c in ["date", "ticker", "universe"] if c in df.columns]
+        if dedup_cols:
+            df = df.drop_duplicates(subset=dedup_cols, keep="last")
+
         return df.sort_values("date"), False  # (data, is_demo=False)
+
     except Exception as e:
         st.warning(f"Could not load HF dataset ({e}). Showing synthetic demo data.")
         return _synthetic_demo(), True  # (data, is_demo=True)
