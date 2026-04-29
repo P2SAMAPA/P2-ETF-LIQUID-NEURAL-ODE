@@ -1,17 +1,13 @@
 setuptools>=68.0.0
 numpy>=1.24.0,<2.0.0
-torch>=2.1.0
-torchdiffeq==0.2.3
-ncps==0.0.7
-PyWavelets>=1.6.0
 pandas>=2.0.0
+# huggingface_hub for listing + downloading parquet files directly
+# (replaces datasets library which requires pyarrow which fails to build on Python 3.14)
+huggingface_hub>=0.20.0
+requests>=2.31.0
+# pyarrow bundled with pandas is sufficient for read_parquet — no separate install needed
 scikit-learn>=1.3.0
 scipy>=1.11.0
-huggingface_hub>=0.20.0
-# FIX: pin pyarrow < 21.0.0 — PyExtensionType was removed in 21.0.0
-# which breaks datasets library. Pin datasets to a version that works with pyarrow 14-20.
-pyarrow>=14.0.0,<21.0.0
-datasets>=2.14.0,<3.0.0
 pydantic>=2.0.0
 pydantic-settings>=2.0.0
 rich>=13.0.0
