@@ -8,12 +8,15 @@ Deploy:  streamlit run app.py
 
 from __future__ import annotations
 
+import io
 import os
 from datetime import datetime
 
 import numpy as np
 import pandas as pd
+import requests
 import streamlit as st
+from huggingface_hub import HfApi
 
 # ── Page config ───────────────────────────────────────────────────────────────
 st.set_page_config(
@@ -91,10 +94,6 @@ def load_results() -> tuple[pd.DataFrame, bool]:
     build failures on Streamlit Cloud where cmake is unavailable.
     """
     try:
-        import io
-        import requests
-        from huggingface_hub import HfApi
-
         hf_token = os.environ.get("HF_TOKEN")
         api = HfApi()
 
