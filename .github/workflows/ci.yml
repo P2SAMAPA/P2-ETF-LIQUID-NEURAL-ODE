@@ -44,11 +44,14 @@ jobs:
         run: pip install "numpy>=1.24.0,<2.0.0"
 
       - name: Install PyTorch CPU
-        # conftest.py imports torch — must be installed before pytest collects tests
+        # Must be before requirements-dev.txt — conftest.py imports torch at collection time
         run: pip install torch --index-url https://download.pytorch.org/whl/cpu
 
-      - name: Install dependencies
-        run: pip install -r requirements-dev.txt
+      - name: Install all dependencies
+        # Install in one step so torchdiffeq, ncps etc. are all present before pytest collects
+        run: |
+          pip install torchdiffeq==0.2.3 ncps==0.0.7 "PyWavelets>=1.6.0"
+          pip install -r requirements-dev.txt
 
       - name: Run tests
         run: pytest --cov=. --cov-report=xml -q
